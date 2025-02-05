@@ -372,18 +372,19 @@ function addAnswer() {
 };
 
 function removeAnswer(event) {
-	let element = event.target.parentElement;
-	let elementId = element.id.split('response')[1];
-	element.remove();
-	pollResponses.splice(elementId, 1);
-	responseDivs = document.getElementsByClassName('response');
-	answerNames = document.getElementsByClassName('answerName');
-	for (let i = 0; i < responseDivs.length; i++) {
-		responseDivs[i].id = `response${i}`;
-		answerNames[i].placeholder = `Answer ${letterString[i]}`;
-	};
-	resNumber.value = parseInt(resNumber.value) - 1;
-};
+    let element = event.target.parentElement;
+    let elementId = element.id.split('response')[1];
+    element.remove();
+    pollResponses.splice(elementId, 1);
+    responseDivs = document.getElementsByClassName('response');
+    answerNames = document.getElementsByClassName('answerName');
+    for (let i = 0; i < responseDivs.length; i++) {
+        responseDivs[i].id = `response${i}`;
+        answerNames[i].placeholder = `Answer ${letterString[i]}`;
+    }
+    resNumber.value = parseInt(resNumber.value) - 1;
+    responseSoundPlayed = false;
+}
 
 function modeChange() {
 	let modeP = document.getElementById('modeP')
@@ -404,9 +405,11 @@ function modeChange() {
 
 // Ends the poll and reloads the users page to stop any more submission
 function clearPollFunc() {
-	socket.emit('clearPoll')
-	startPollForm.style.display = 'block'
-	clearPoll.style.display = 'none'
+    socket.emit('clearPoll');
+    startPollForm.style.display = 'block';
+    clearPoll.style.display = 'none';
+    endPoll.style.display = 'none';
+    responseSoundPlayed = false;
 }
 
 function endPollFunc() {

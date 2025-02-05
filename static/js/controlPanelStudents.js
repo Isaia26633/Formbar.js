@@ -542,12 +542,51 @@ function approveBreak(breakApproval, username) {
 
 let helpSoundPlayed = false;
 let breakSoundPlayed = false;
+let responseSoundPlayed = false;
+
+async function cacheSounds() {
+    try {
+        const cache = await caches.open('audio-cache');
+        const urls = [
+            '/sfx/help.wav',
+            '/sfx/break.wav',
+            '/sfx/TUTD.wav'
+        ];
+
+        await Promise.all(urls.map(async url => {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${url}`);
+            }
+            await cache.put(url, response.clone());
+            console.log(`Cached ${url}`);
+        }));
+    } catch (error) {
+        console.error('Error caching sounds:', error);
+    }
+}
+
+async function playCachedSound(soundFile) {
+    try {
+        const cache = await caches.open('audio-cache');
+        const response = await cache.match(`/sfx/${soundFile}`);
+        if (response) {
+            const blob = await response.blob();
+            const audio = new Audio(URL.createObjectURL(blob));
+            audio.play();
+            console.log(`Playing cached sound: ${soundFile}`);
+        } else {
+            console.error(`Sound file ${soundFile} not found in cache`);
+        }
+    } catch (error) {
+        console.error('Error playing cached sound:', error);
+    }
+}
 
 function helpSound() {
     if (!helpSoundPlayed) {
-        let helpPing = new Audio('/sfx/help.wav');
         if (mute == false) {
-            helpPing.play();
+            playCachedSound('help.wav')
             helpSoundPlayed = true;
         }
     }
@@ -555,36 +594,63 @@ function helpSound() {
 
 function breaksounds() {
     if (!breakSoundPlayed) {
-        let breakPing = new Audio('/sfx/break.wav');
         if (mute == false) {
-            breakPing.play();
+            playCachedSound('break.wav');
             breakSoundPlayed = true;
         }
     }
 }
 
-function responseSound() {
-    let responsePing = new Audio('/sfx/TUTD.wav');
+const responseSoundPlayedFlags = {};
 
-    // plays the sounds
-    function playResponseSound() {
-        if (mute == false) {
-            responsePing.play();
+function responseSound() {
+    // Plays the response sound for a specific user
+    function playResponseSound(userId, color) {
+        if (mute == false && !responseSoundPlayedFlags[userId] && color !== 'rgb(0, 0, 0)') {
+            console.log(`Playing response sound for user: ${userId}, color: ${color}`);
+            playCachedSound('TUTD.wav');
+            responseSoundPlayedFlags[userId] = true;
+        } else {
+            console.log(`Sound not played for user: ${userId}. Mute: ${mute}, Response sound already played: ${responseSoundPlayedFlags[userId]}, Color: ${color}`);
         }
     }
 
-    //creates a mutation observer to watch for changes in the DOM
-
+    // Creates a mutation observer to watch for changes in the poll responses element
     const observer = new MutationObserver((mutationsList, observer) => {
         for (let mutation of mutationsList) {
-            if (mutation.type === 'childList') {
-                playResponseSound()
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                const target = mutation.target;
+                const userId = target.id; // Assuming the ID is the user ID
+                // Add a slight delay before checking the color
+                setTimeout(() => {
+                    const color = window.getComputedStyle(target).color;
+                    console.log(`Detected color change for user: ${userId}, color: ${color}`);
+                    playResponseSound(userId, color);
+                }, 100); // Adjust the delay as needed
             }
         }
-    })
+    });
 
-    //starts the observer and targets the node for configured mutations
-    const targetNode = document.body
-    const config = { childList: true }
-    observer.observe(targetNode, config)
+    // Starts the observer and targets the node for configured mutations
+    function startObserver() {
+        const targetNode = document.getElementById('users'); // Adjust this to the parent element containing student elements
+        if (targetNode) {
+            const config = { attributes: true, subtree: true, attributeFilter: ['style'] };
+            observer.observe(targetNode, config);
+            console.log('Observer started on target node:', targetNode);
+        } else {
+            console.error('Target node for class container not found');
+        }
+    }
+
+    // Wait for the page to fully load and settle before starting the observer
+    window.addEventListener('load', () => {
+        setTimeout(startObserver, 1000); // Adjust the timeout as needed
+    });
 }
+
+// Call cacheSounds to cache the sounds
+cacheSounds();
+
+// Start observing for response sound
+responseSound();
