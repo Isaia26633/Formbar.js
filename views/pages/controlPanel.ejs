@@ -472,16 +472,17 @@
 			console.log(settings);
 			setMuteSound(mute)
 
-			function setMuteSound(isMuted) {
-				mute = isMuted;
-				document.getElementById('muteButton').hidden = mute;
-				document.getElementById('unmuteButton').hidden = !mute;
-			}
+			function muteSound() {
+				document.getElementById('muteButton').hidden = true;
+				document.getElementById('unmuteButton').hidden = false;
+				mute = true;
+			};
 
-			function toggleMuteSound() {
-				setMuteSound(!mute);
-				socket.emit('setClassSetting', 'mute', mute);
-			}
+			function unmuteSound() {
+				document.getElementById('muteButton').hidden = false;
+				document.getElementById('unmuteButton').hidden = true;
+				mute = false;
+			};
 		</script>
 		<script src='/js/controlPanelStudents.js'></script>
 		<script src='/js/controlPanelSockets.js'></script>
