@@ -7,20 +7,26 @@ module.exports = {
         socket.on('setTags', (tags) => {
             // Set the tags for the class
             try {
+                // Make sure the offline tag is always present
+                if (!tags.includes("Offline")) {
+                    tags.push("Offline")
+                }
+
+                // Save the tags to the class object
                 tags = tags.sort();
                 classInformation.classrooms[socket.request.session.classId].tagNames = tags;
 
                 // Now remove all instances of the tag from the students' tags
                 for (const student of Object.values(classInformation.classrooms[socket.request.session.classId].students)) {
                     if (student.classPermissions == 0 || student.classPermissions >= 5) continue;
-                
+                    if (!student.tags) student.tags = "";
+
                     let studentTags = student.tags.split(",");
                     for (let i = 0; i < studentTags.length; i++) {
                         if (!tags.includes(studentTags[i])) {
                             studentTags.splice(i, 1);
                         }
                     }
-
                     student.tags = studentTags.toString();
                     database.get('SELECT * FROM users WHERE username = ?', [student.username], (err, row) => {
                         if (err) {
