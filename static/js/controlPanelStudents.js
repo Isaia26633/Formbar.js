@@ -1,13 +1,5 @@
 // Creates student elements for the user list inside the control panel
 
-function buildOption(value, text, selected = false) {
-    let option = document.createElement('option')
-    option.value = value
-    option.selected = selected
-    option.textContent = text
-    return option
-}
-
 // Holds users that are taking a break
 const userBreak = []
 
@@ -15,30 +7,29 @@ const userBreak = []
 let opendetails = []
 
 // Create a student in the user list
-function buildStudent(room, studentData) {
-    let newStudent
-    let cloneDiv = document.getElementById('student-fake')
+function buildStudent(classroom, studentData) {
+    const studentTemplateDiv = document.getElementById('student-fake')
 
     if (studentData.classPermissions < currentUser.classPermissions) {
-        newStudent = cloneDiv.cloneNode(true)
+        const newStudent = studentTemplateDiv.cloneNode(true)
         newStudent.hidden = false
         newStudent.style.display = 'flex'
-        newStudent.id = `student-${studentData.username}`
-        newStudent.open = opendetails.indexOf(studentData.username) != -1
+        newStudent.id = `student-${studentData.email}`
+        newStudent.open = opendetails.indexOf(studentData.email) != -1
 
         newStudent.addEventListener('click', () => {
             if (newStudent.open) {
-                opendetails.splice(opendetails.indexOf(studentData.username), 1)
+                opendetails.splice(opendetails.indexOf(studentData.email), 1)
             } else {
-                opendetails.push(studentData.username)
+                opendetails.push(studentData.email)
             }
         })
-        
+
         let summary = newStudent.querySelector('summary')
         let alertSpan = newStudent.querySelector('#alerts')
         let helpReason = newStudent.querySelector('#helpReason')
         let breakReason = newStudent.querySelector('#breakReason')
-        let studBox = newStudent.querySelector('input[type="checkbox"]')
+        let studentBox = newStudent.querySelector('input[type="checkbox"]')
         let pollBox = newStudent.querySelector('#response')
         let studTagsSpan = newStudent.querySelector('#studentTags')
         let roomTagDiv = newStudent.querySelector('#roomTags')
@@ -46,21 +37,21 @@ function buildStudent(room, studentData) {
         let reasonsDiv = newStudent.querySelector('#reasons')
         let extraButtons = newStudent.querySelector('#extraButtons')
 
-        newStudent.querySelector('#username').textContent = studentData.displayName
-        studBox.id = 'checkbox_' + studentData.username
-        studBox.checked = room.poll.studentBoxes.indexOf(studentData.username) != -1
+        newStudent.querySelector('#email').textContent = studentData.displayName
+        studentBox.id = 'checkbox_' + studentData.email
+        studentBox.checked = classroom.poll.studentBoxes.indexOf(studentData.email) != -1
 
-        for (let eachResponse in room.poll.responses) {
+        for (let eachResponse in classroom.poll.responses) {
             if (studentData.pollRes.textRes) {
-                pollBox.style.color = room.poll.responses[eachResponse].color
+                pollBox.style.color = classroom.poll.responses[eachResponse].color
                 pollBox.textContent = studentData.pollRes.textRes
-            } else if (eachResponse == studentData.pollRes.buttonRes && !room.poll.multiRes) {
-                pollBox.style.color = room.poll.responses[eachResponse].color
+            } else if (eachResponse == studentData.pollRes.buttonRes && !classroom.poll.multiRes) {
+                pollBox.style.color = classroom.poll.responses[eachResponse].color
                 pollBox.textContent = eachResponse
-            } else if (room.poll.multiRes && studentData.pollRes.buttonRes.indexOf(eachResponse) != -1) {
+            } else if (classroom.poll.multiRes && studentData.pollRes.buttonRes.indexOf(eachResponse) != -1) {
                 let tempElem = document.createElement('span')
                 tempElem.textContent = eachResponse + ' '
-                tempElem.style.color = room.poll.responses[eachResponse].color
+                tempElem.style.color = classroom.poll.responses[eachResponse].color
                 pollBox.appendChild(tempElem)
             }
         }
@@ -87,7 +78,7 @@ function buildStudent(room, studentData) {
 
             let deleteTicketButton = document.createElement('button')
             deleteTicketButton.classList.add('quickButton')
-            deleteTicketButton.dataset.studentName = studentData.username
+            deleteTicketButton.dataset.studentName = studentData.email
             deleteTicketButton.onclick = (event) => {
                 deleteTicket(event.target)
                 helpSoundPlayed = false;
@@ -101,7 +92,7 @@ function buildStudent(room, studentData) {
         }
 
         if (studentData.break == true) {
-            userBreak.push(studentData.username)
+            userBreak.push(studentData.email)
         } else if (studentData.break) {
             newStudent.classList.add('break')
             alertSpan.classList.add('break')
@@ -111,18 +102,18 @@ function buildStudent(room, studentData) {
 
             let approveBreakButton = document.createElement('button')
             approveBreakButton.classList.add('quickButton')
-            approveBreakButton.dataset.studentName = studentData.username
+            approveBreakButton.dataset.studentName = studentData.email
             approveBreakButton.onclick = (event) => {
-                approveBreak(true, studentData.username)
+                approveBreak(true, studentData.email)
                 breakSoundPlayed = false;
             }
             approveBreakButton.textContent = 'Approve Break'
 
             let denyBreakButton = document.createElement('button')
             denyBreakButton.classList.add('quickButton')
-            denyBreakButton.dataset.studentName = studentData.username
+            denyBreakButton.dataset.studentName = studentData.email
             denyBreakButton.onclick = (event) => {
-                approveBreak(false, studentData.username)
+                approveBreak(false, studentData.email)
             }
             denyBreakButton.textContent = 'Deny Break'
 
@@ -147,9 +138,9 @@ function buildStudent(room, studentData) {
             let permSwitch = document.createElement('button')
             permSwitch.setAttribute("name", "permSwitch");
             permSwitch.setAttribute("class", "permSwitch");
-            permSwitch.setAttribute("data-username", studentData.username);
+            permSwitch.setAttribute("data-email", studentData.email);
             permSwitch.onclick = (event) => {
-                socket.emit('classPermChange', studentData.username, Number(permission))
+                socket.emit('classPermChange', studentData.email, Number(permission))
                 permSwitch.classList.add('pressed')
                 permSwitch.parentElement.querySelectorAll('.permSwitch').forEach((perm) => {
                     if (perm != permSwitch) {
@@ -165,14 +156,14 @@ function buildStudent(room, studentData) {
         }
 
         // Add each tag as a button to the tag form
-        for (let i = 0; i < room.tagNames.length; i++) {
-            let tag = room.tagNames[i]
+        for (let i = 0; i < classroom.tagNames.length; i++) {
+            let tag = classroom.tagNames[i]
             if (tag == 'Offline') continue
 
             let button = document.createElement('button');
             button.innerHTML = tag
-            button.name = `button${room.tagNames[i]}`;
-            button.value = room.tagNames[i];
+            button.name = `button${classroom.tagNames[i]}`;
+            button.value = classroom.tagNames[i];
             if (studentData.tags == null && studentData.tags == undefined) studentData.tags = ''
             button.onclick = function () {
                 if (!button.classList.contains('pressed')) {
@@ -218,7 +209,7 @@ function buildStudent(room, studentData) {
                     for (let tagButton of roomTagDiv.querySelectorAll('button.pressed')) {
                         tags.push(tagButton.textContent);
                     }
-                    socket.emit('saveTags', studentData.id, tags, studentData.username);
+                    socket.emit('saveTags', studentData.id, tags, studentData.email);
                 }
 
                 createTagSelectButtons();
@@ -240,20 +231,20 @@ function buildStudent(room, studentData) {
         // Ban and Kick buttons
         let banStudentButton = document.createElement('button')
         banStudentButton.className = 'banUser quickButton'
-        banStudentButton.setAttribute('data-user', studentData.username)
+        banStudentButton.setAttribute('data-user', studentData.email)
         banStudentButton.textContent = 'Ban User'
         banStudentButton.onclick = (event) => {
-            if (confirm(`Are you sure you want to ban ${studentData.username}?`)) {
-                socket.emit('classBanUser', studentData.username)
+            if (confirm(`Are you sure you want to ban ${studentData.email}?`)) {
+                socket.emit('classBanUser', studentData.email)
             }
         }
         extraButtons.appendChild(banStudentButton)
         let kickUserButton = document.createElement('button')
         kickUserButton.className = 'kickUser quickButton'
-        kickUserButton.setAttribute('data-userid', studentData.username)
+        kickUserButton.setAttribute('data-userid', studentData.email)
         kickUserButton.onclick = (event) => {
-            if (confirm(`Are you sure you want to kick ${studentData.username}?`)) {
-                socket.emit('classKickUser', studentData.username)
+            if (confirm(`Are you sure you want to kick ${studentData.email}?`)) {
+                socket.emit('classKickUser', studentData.email)
             }
         }
         kickUserButton.textContent = 'Kick User'
@@ -272,42 +263,42 @@ function filterSortChange(classroom) {
 
     let userOrder = Object.keys(classroom.students)
 
-    userOrder = userOrder.filter(username => username != currentUser.username)
+    userOrder = userOrder.filter(email => email != currentUser.email)
 
-    for (let username of userOrder) {
-        document.getElementById(`student-${username}`).style.display = ''
+    for (let email of userOrder) {
+        document.getElementById(`student-${email}`).style.display = ''
     }
 
     // filter by help
     if (filter.alert) {
-        for (let username of userOrder.slice()) {
-            let studentElement = document.getElementById(`student-${username}`);
+        for (let email of userOrder.slice()) {
+            let studentElement = document.getElementById(`student-${email}`);
             if (
                 (
-                    (filter.alert == 1 && !classroom.students[username].help && !classroom.students[username].break) ||
-                    (filter.alert == 2 && (classroom.students[username].help || classroom.students[username].break))
+                    (filter.alert == 1 && !classroom.students[email].help && !classroom.students[email].break) ||
+                    (filter.alert == 2 && (classroom.students[email].help || classroom.students[email].break))
                 )
             ) {
                 studentElement.style.display = 'none'
-                userOrder.pop(username)
+                userOrder.pop(email)
             }
         }
     }
 
     // filter by poll
     if (filter.polls) {
-        for (let username of userOrder) {
-            let studentElement = document.getElementById(`student-${username}`);
+        for (let email of userOrder) {
+            let studentElement = document.getElementById(`student-${email}`);
             if (
                 (filter.polls == 1 && (
-                    !classroom.students[username].pollRes.buttonRes && !classroom.students[username].pollRes.textRes)
+                        !classroom.students[email].pollRes.buttonRes && !classroom.students[email].pollRes.textRes)
                 ) ||
                 (filter.polls == 2 &&
-                    (classroom.students[username].pollRes.buttonRes || classroom.students[username].pollRes.textRes)
+                    (classroom.students[email].pollRes.buttonRes || classroom.students[email].pollRes.textRes)
                 )
             ) {
                 studentElement.style.display = 'none'
-                userOrder.pop(username)
+                userOrder.pop(email)
             }
         }
     }
@@ -417,7 +408,12 @@ for (let filterElement of document.getElementsByClassName('filter')) {
         }
 
         filterElement.textContent = FilterState[filterElement.id][filter[filterElement.id]]
-        socket.emit("setClassSetting", "filter", `${filterElement.id}-${filter[filterElement.id]}`)
+
+        // Update the filter settings in the database
+        socket.emit("setClassSetting", "filter", JSON.stringify({
+            alert: filter["alert"],
+            polls: filter["polls"]
+        }))
         filterSortChange(classroom)
     }
 }
@@ -461,15 +457,8 @@ function deleteTicket(e) {
     socket.emit('deleteTicket', e.dataset.studentName)
 }
 
-function makeLesson() {
-    let learningObj = document.getElementById('learningObj')
-    let dueAssigns = document.getElementById('dueAssigns')
-    socket.emit('lessonStart', learningObj.value)
-    alert('Lesson Created')
-}
-
-function approveBreak(breakApproval, username) {
-    socket.emit('approveBreak', breakApproval, username)
+function approveBreak(breakApproval, email) {
+    socket.emit('approveBreak', breakApproval, email)
 }
 
 let helpSoundPlayed = false;
@@ -532,57 +521,3 @@ function breakSound() {
         }
     }
 }
-
-const responseSoundPlayedFlags = {};
-
-function responseSound() {
-    // Plays the response sound for a specific user
-    function playResponseSound(userId, color) {
-        if (mute == false && !responseSoundPlayedFlags[userId] && color !== 'rgb(0, 0, 0)') {
-            console.log(`Playing response sound for user: ${userId}, color: ${color}`);
-            playCachedSound('TUTD.wav');
-            responseSoundPlayedFlags[userId] = true;
-        } else {
-            console.log(`Sound not played for user: ${userId}. Mute: ${mute}, Response sound already played: ${responseSoundPlayedFlags[userId]}, Color: ${color}`);
-        }
-    }
-
-    // Creates a mutation observer to watch for changes in the poll responses element
-    const observer = new MutationObserver((mutationsList, observer) => {
-        for (let mutation of mutationsList) {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                const target = mutation.target;
-                const userId = target.id; // Assuming the ID is the user ID
-                // Add a slight delay before checking the color
-                setTimeout(() => {
-                    const color = window.getComputedStyle(target).color;
-                    console.log(`Detected color change for user: ${userId}, color: ${color}`);
-                    playResponseSound(userId, color);
-                }, 100); // Adjust the delay as needed
-            }
-        }
-    });
-
-    // Starts the observer and targets the node for configured mutations
-    function startObserver() {
-        const targetNode = document.getElementById('users'); // Adjust this to the parent element containing student elements
-        if (targetNode) {
-            const config = { attributes: true, subtree: true, attributeFilter: ['style'] };
-            observer.observe(targetNode, config);
-            console.log('Observer started on target node:', targetNode);
-        } else {
-            console.error('Target node for class container not found');
-        }
-    }
-
-    // Wait for the page to fully load and settle before starting the observer
-    window.addEventListener('load', () => {
-        setTimeout(startObserver, 1000); // Adjust the timeout as needed
-    });
-}
-
-// Call cacheSounds to cache the sounds
-cacheSounds();
-
-// Start observing for response sound
-responseSound();

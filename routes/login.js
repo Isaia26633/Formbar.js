@@ -1,7 +1,7 @@
 const { hash, compare } = require('../modules/crypto');
 const { database, dbRun, dbGet } = require("../modules/database");
 const { classInformation } = require("../modules/class");
-const { logNumbers } = require("../modules/config");
+const { settings, logNumbers } = require("../modules/config");
 const { logger } = require("../modules/logger");
 const { Student } = require("../modules/student");
 const { STUDENT_PERMISSIONS, MANAGER_PERMISSIONS, GUEST_PERMISSIONS } = require("../modules/permissions");
@@ -9,10 +9,8 @@ const { managerUpdate } = require("../modules/socketUpdates");
 const { sendMail, limitStore, RATE_LIMIT } = require('../modules/mail.js');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const fs = require('fs');
 
-// Regex to test if the username, password, and display name are valid
-const usernameRegex = /^[a-zA-Z0-9_]{5,20}$/;
+// Regex to test if the password and display name are valid
 const passwordRegex = /^[a-zA-Z0-9!@#$%^&*()\-_+=\{\}\[\]<>,.:;'\"~?/\|\\]{5,20}$/;
 const displayRegex = /^[a-zA-Z0-9_ ]{5,20}$/;
 
@@ -53,9 +51,9 @@ module.exports = {
                     };
 
                     database.run(
-                        'INSERT INTO users(username, email, password, permissions, API, secret, displayName, verified) VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT INTO users(email, email, password, permissions, API, secret, displayName, verified) VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
                         [
-                            user.username,
+                            user.email,
                             user.email,
                             user.hashedPassword,
                             user.permissions,
@@ -68,11 +66,11 @@ module.exports = {
                                 if (err) throw err
                                 logger.log('verbose', '[get /login] Added user to database')
                                 // Find the user in which was just created to get the id of the user
-                                database.get('SELECT * FROM users WHERE username=?', [user.username], (err, userData) => {
+                                database.get('SELECT * FROM users WHERE email=?', [user.email], (err, userData) => {
                                     try {
                                         if (err) throw err;
-                                        classInformation.users[userData.username] = new Student(
-                                            userData.username,
+                                        classInformation.users[userData.email] = new Student(
+                                            userData.email,
                                             userData.id,
                                             userData.permissions,
                                             userData.API,
@@ -84,7 +82,7 @@ module.exports = {
                                         );
                                         // Add the user to the session in order to transfer data between each page
                                         req.session.userId = userData.id
-                                        req.session.username = userData.username
+                                        req.session.email = userData.email
                                         req.session.classId = null
                                         req.session.displayName = userData.displayName;
                                         req.session.email = userData.email;
@@ -141,33 +139,37 @@ module.exports = {
 
         // This lets the user log into the server, it uses each element from the database to allow the server to do so
         // This lets users actually log in instead of not being able to log in at all
-        // It uses the usernames, passwords, etc. to verify that it is the user that wants to log in logging in
+        // It uses the emails, passwords, etc. to verify that it is the user that wants to log in logging in
         // This also hashes passwords to make sure people's accounts don't get hacked
         app.post('/login', (req, res) => {
             try {
                 const user = {
-                    username: req.body.username,
                     password: req.body.password,
                     email: req.body.email,
                     loginType: req.body.loginType,
                     userType: req.body.userType,
                     displayName: req.body.displayName
                 };
+
+                // Set email to email to avoid breaking things
+                // email should no longer be used, but it's safe to assume it'll be the same as the email
+                user.email = user.email;
+
                 logger.log('info', `[post /login] ip=(${req.ip}) session=(${JSON.stringify(req.session)}`)
-                logger.log('verbose', `[post /login] username=(${user.username}) password=(${Boolean(user.password)}) loginType=(${user.loginType}) userType=(${user.userType})`)
+                logger.log('verbose', `[post /login] email=(${user.email}) password=(${Boolean(user.password)}) loginType=(${user.loginType}) userType=(${user.userType})`)
 
                 // Check whether user is logging in or signing up
                 if (user.loginType == 'login') {
                     logger.log('verbose', '[post /login] User is logging in');
 
                     // Get the users login in data to verify password
-                    database.get('SELECT users.*, CASE WHEN shared_polls.pollId IS NULL THEN json_array() ELSE json_group_array(DISTINCT shared_polls.pollId) END as sharedPolls, CASE WHEN custom_polls.id IS NULL THEN json_array() ELSE json_group_array(DISTINCT custom_polls.id) END as ownedPolls FROM users LEFT JOIN shared_polls ON shared_polls.userId = users.id LEFT JOIN custom_polls ON custom_polls.owner = users.id WHERE users.username=?', [user.username], async (err, userData) => {
+                    database.get('SELECT users.*, CASE WHEN shared_polls.pollId IS NULL THEN json_array() ELSE json_group_array(DISTINCT shared_polls.pollId) END as sharedPolls, CASE WHEN custom_polls.id IS NULL THEN json_array() ELSE json_group_array(DISTINCT custom_polls.id) END as ownedPolls FROM users LEFT JOIN shared_polls ON shared_polls.userId = users.id LEFT JOIN custom_polls ON custom_polls.owner = users.id WHERE users.email=?', [user.email], async (err, userData) => {
                         try {
                             // Check if a user with that name was not found in the database
-                            if (!userData.username) {
+                            if (!userData.email) {
                                 logger.log('verbose', '[post /login] User does not exist')
                                 res.render('pages/message', {
-                                    message: 'No user found with that username.',
+                                    message: 'No user found with that email.',
                                     title: 'Login'
                                 });
                                 return;
@@ -184,9 +186,9 @@ module.exports = {
                                 return
                             }
 
-                            // If the user does not have a display name, set it to their username
+                            // If the user does not have a display name, set it to their email
                             if (!userData.displayName) {
-                                database.run("UPDATE users SET displayName = ? WHERE username = ?", [userData.username, userData.username]), (err) => {
+                                database.run("UPDATE users SET displayName = ? WHERE email = ?", [userData.email, userData.email]), (err) => {
                                     try {
                                         if (err) throw err;
                                         logger.log('verbose', '[post /login] Added displayName to database');
@@ -204,8 +206,8 @@ module.exports = {
                             let classId = ''
                             for (let classData of Object.values(classInformation.classrooms)) {
                                 if (classData.key) {
-                                    for (let username of Object.keys(classData.students)) {
-                                        if (username == userData.username) {
+                                    for (let email of Object.keys(classData.students)) {
+                                        if (email == userData.email) {
                                             loggedIn = true
                                             classId = classData.id
                                             break
@@ -218,8 +220,8 @@ module.exports = {
                                 logger.log('verbose', '[post /login] User is already logged in')
                                 req.session.classId = classId
                             } else {
-                                classInformation.users[userData.username] = new Student(
-                                    userData.username,
+                                classInformation.users[userData.email] = new Student(
+                                    userData.email,
                                     userData.id,
                                     userData.permissions,
                                     userData.API,
@@ -235,7 +237,7 @@ module.exports = {
 
                             // Add a cookie to transfer user credentials across site
                             req.session.userId = userData.id;
-                            req.session.username = userData.username;
+                            req.session.email = userData.email;
                             req.session.tags = userData.tags;
                             req.session.displayName = userData.displayName;
                             req.session.verified = userData.verified;
@@ -261,11 +263,11 @@ module.exports = {
                         }
                     })
                 } else if (user.loginType == 'new') {
-                    // Check if the username, password, and display name are valid
-                    if (!usernameRegex.test(user.username) || !passwordRegex.test(user.password) || !displayRegex.test(user.displayName)) {
+                    // Check if the password and display name are valid
+                    if (!passwordRegex.test(user.password) || !displayRegex.test(user.displayName)) {
                         logger.log('verbose', '[post /login] Invalid data provided to create new user');
                         res.render('pages/message', {
-                            message: 'Invalid username, password, or display name. Please try again.',
+                            message: 'Invalid password or display name. Please try again.',
                             title: 'Login'
                         });
                         return;
@@ -276,7 +278,7 @@ module.exports = {
 
                     logger.log('verbose', '[post /login] Creating new user')
                     let permissions = STUDENT_PERMISSIONS
-                    database.all('SELECT API, secret, username FROM users', async (err, users) => {
+                    database.all('SELECT API, secret, email FROM users', async (err, users) => {
                         try {
                             if (err) throw err
 
@@ -293,10 +295,10 @@ module.exports = {
                             for (let dbUser of users) {
                                 existingAPIs.push(dbUser.API)
                                 existingSecrets.push(dbUser.secret)
-                                if (dbUser.username == user.username) {
+                                if (dbUser.email == user.email) {
                                     logger.log('verbose', '[post /login] User already exists')
                                     res.render('pages/message', {
-                                        message: 'A user with that username already exists.',
+                                        message: 'A user with that email already exists.',
                                         title: 'Login'
                                     })
                                     return
@@ -304,7 +306,7 @@ module.exports = {
                             }
 
                             do {
-                                newAPI = crypto.randomBytes(64).toString('hex')
+                                newAPI = crypto.randomBytes(32).toString('hex')
                             } while (existingAPIs.includes(newAPI))
 
                             do {
@@ -320,9 +322,8 @@ module.exports = {
                                 user.hashedPassword = hashedPassword;
                                 user.permissions = permissions;
                                 database.run(
-                                    'INSERT INTO users(username, email, password, permissions, API, secret, displayName, verified) VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
+                                    'INSERT INTO users(email, password, permissions, API, secret, displayName, verified) VALUES(?, ?, ?, ?, ?, ?, ?)',
                                     [
-                                        user.username,
                                         user.email,
                                         user.hashedPassword,
                                         user.permissions,
@@ -335,11 +336,11 @@ module.exports = {
                                             if (err) throw err
                                             logger.log('verbose', '[get /login] Added user to database')
                                             // Find the user in which was just created to get the id of the user
-                                            database.get('SELECT * FROM users WHERE username=?', [user.username], (err, userData) => {
+                                            database.get('SELECT * FROM users WHERE email=?', [user.email], (err, userData) => {
                                                 try {
                                                     if (err) throw err;
-                                                    classInformation.users[userData.username] = new Student(
-                                                        userData.username,
+                                                    classInformation.users[userData.email] = new Student(
+                                                        userData.email,
                                                         userData.id,
                                                         userData.permissions,
                                                         userData.API,
@@ -351,7 +352,7 @@ module.exports = {
                                                     );
                                                     // Add the user to the session in order to transfer data between each page
                                                     req.session.userId = userData.id
-                                                    req.session.username = userData.username
+                                                    req.session.email = userData.email
                                                     req.session.classId = null
                                                     req.session.displayName = userData.displayName;
                                                     req.session.email = userData.email;
@@ -451,9 +452,9 @@ module.exports = {
                     logger.log('verbose', '[post /login] Logging in as guest');
 
                     // Create a temporary guest user
-                    const username = 'guest' + crypto.randomBytes(4).toString('hex');
+                    const email = 'guest' + crypto.randomBytes(4).toString('hex');
                     const student =  new Student(
-                        username, // Username
+                        email, // email
                         9999, // Id
                         GUEST_PERMISSIONS,
                         null, // API key
@@ -463,14 +464,15 @@ module.exports = {
                         user.displayName,
                         true
                     );
-                    classInformation.users[student.username] = student;
+                    student.email = student.email; // Set email to email for guest users
+                    classInformation.users[student.email] = student;
 
                     // Set their current class to no class
                     req.session.classId = null;
 
                     // Add a cookie to transfer user credentials across site
                     req.session.userId = student.id;
-                    req.session.username = student.username;
+                    req.session.email = student.email;
                     req.session.email = student.email;
                     req.session.tags = student.tags;
                     req.session.displayName = student.displayName;

@@ -18,56 +18,56 @@ describe('break', () => {
         endBreakHandler = socket.on.mock.calls.find(call => call[0] === 'endBreak')[1];
     });
 
-    test("should fail if class isn't active", async () => {
+    it("should fail if class isn't active", async () => {
         const classData = createTestClass(testData.code, 'Test Class');
-        createTestUser(testData.username, testData.code, 3);
+        createTestUser(testData.email, testData.code, 3);
 
         classData.isActive = false;
         await requestBreakHandler("reason");
 
-        expect(classData.students[testData.username].break).toBe(false);
+        expect(classData.students[testData.email].break).toBe(false);
     })
 
-    test("should set the break reason", async () => {
+    it("should set the break reason", async () => {
         const classData = createTestClass(testData.code, 'Test Class');
-        createTestUser(testData.username, testData.code, 3);
+        createTestUser(testData.email, testData.code, 3);
 
         classData.isActive = true;
         await requestBreakHandler("reason");
 
-        expect(classData.students[testData.username].break).toBe("reason");
+        expect(classData.students[testData.email].break).toBe("reason");
     })
 
-    test("should approve break ticket", async () => {
+    it("should approve break ticket", async () => {
         const classData = createTestClass(testData.code, 'Test Class');
-        const userData = createTestUser(testData.username, testData.code, 3);
+        const userData = createTestUser(testData.email, testData.code, 3);
 
         classData.isActive = true;
-        classData.students[userData.username].break = "reason";
-        await approveBreakHandler(true, userData.username);
+        classData.students[userData.email].break = "reason";
+        await approveBreakHandler(true, userData.email);
 
-        expect(classData.students[testData.username].break).toBe(true);
+        expect(classData.students[testData.email].break).toBe(true);
     });
 
-    test("should deny break ticket", async () => {
+    it("should deny break ticket", async () => {
         const classData = createTestClass(testData.code, 'Test Class');
-        const userData = createTestUser(testData.username, testData.code, 3);
+        const userData = createTestUser(testData.email, testData.code, 3);
 
         classData.isActive = true;
-        classData.students[userData.username].break = "reason";
-        await approveBreakHandler(false, userData.username);
+        classData.students[userData.email].break = "reason";
+        await approveBreakHandler(false, userData.email);
 
-        expect(classData.students[testData.username].break).toBe(false);
+        expect(classData.students[testData.email].break).toBe(false);
     })
 
-    test("should delete break ticket", async () => {
+    it("should delete break ticket", async () => {
         const classData = createTestClass(testData.code, 'Test Class');
-        const userData = createTestUser(testData.username, testData.code, 3);
+        const userData = createTestUser(testData.email, testData.code, 3);
 
         classData.isActive = true;
-        classData.students[userData.username].break = "reason";
-        await endBreakHandler(userData.username);
+        classData.students[userData.email].break = "reason";
+        await endBreakHandler(userData.email);
 
-        expect(classData.students[testData.username].break).toBe(false);
+        expect(classData.students[testData.email].break).toBe(false);
     })
 })

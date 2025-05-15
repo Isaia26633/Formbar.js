@@ -6,7 +6,7 @@ module.exports = {
     run(router) {
         router.get('/apiPermissionCheck', async (req, res) => {
 			try {
-				let { api, permissionType } = req.query
+				let { api, permissionType, classId } = req.query
 
 				let permissionTypes = {
 					games: null,
@@ -23,6 +23,11 @@ module.exports = {
 					res.status(400).json({ error: 'No permissionType provided.' })
 					return
 				}
+
+				if (!classId) {
+					res.status(400).json({ error: 'No classId provided.' })
+					return
+				}
                 
 				if (!Object.keys(permissionTypes).includes(permissionType)) {
 					res.status(400).json({ error: 'Invalid permissionType.' })
@@ -35,14 +40,19 @@ module.exports = {
 					return
 				}
 
+				// Check if there is a class id set for the user
 				if (!user.class) {
 					res.status(403).json({ reason: 'User is not in a class.' })
 					return
 				}
 
-				const classroomId = getClassIDFromCode(user.class)
-				const classroom = classInformation.classrooms[classroomId]
+				// Check if the user is in the requested class
+				if (user.class != classId) {
+					res.status(403).json({ reason: 'User is not in the requested class.' })
+					return
+				}
 
+				const classroom = classInformation.classrooms[user.class]
 				permissionTypes.games = classroom.permissions.games
 				permissionTypes.lights = classroom.permissions.lights
 				permissionTypes.sounds = classroom.permissions.sounds

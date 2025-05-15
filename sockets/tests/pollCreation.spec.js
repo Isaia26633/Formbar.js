@@ -40,8 +40,8 @@ describe('startPoll', () => {
         startPollHandler = socket.on.mock.calls.find(call => call[0] === 'startPoll')[1];
     });
 
-    test('should start a poll successfully', async () => {
-        await startPollHandler(3, true, 'Test Poll', [{}, {}, {}], false, 1, ['tag1'], ['box1'], ['indeterminate1'], ['lastResponse1'], true);
+    it('should start a poll successfully', async () => {
+        await startPollHandler(3, true, 'Test Poll', [{}, {}, {}], false, 1, ['tag1'], ['box1'], ['indeterminate1'], true);
 
         // Check if the poll was started successfully
         expect(socketUpdates.clearPoll).toHaveBeenCalled();
@@ -54,19 +54,19 @@ describe('startPoll', () => {
         expect(socket.emit).toHaveBeenCalledWith('startPoll');
     });
 
-    test('should not start a poll if class is not active', async () => {
+    it('should not start a poll if class is not active', async () => {
         classInformation.classrooms[testData.code].isActive = false;
 
         // Attempt to start the poll then check if it failed
-        await startPollHandler(3, true, 'Test Poll', [{}, {}, {}], false, 1, ['tag1'], ['box1'], ['indeterminate1'], ['lastResponse1'], true);
+        await startPollHandler(3, true, 'Test Poll', [{}, {}, {}], false, 1, ['tag1'], ['box1'], ['indeterminate1'], true);
         expect(socket.emit).toHaveBeenCalledWith('message', 'This class is not currently active.');
     });
 
-    test('should handle error during poll start', async () => {
+    it('should handle error during poll start', async () => {
         generateColors.mockImplementation(() => { throw new Error('Test Error'); });
 
         // Attempt to start the poll then check if the error was logged
-        await startPollHandler(3, true, 'Test Poll', [{}, {}, {}], false, 1, ['tag1'], ['box1'], ['indeterminate1'], ['lastResponse1'], true);
+        await startPollHandler(3, true, 'Test Poll', [{}, {}, {}], false, 1, ['tag1'], ['box1'], ['indeterminate1'], true);
         expect(logger.log).toHaveBeenCalledWith('error', expect.stringContaining('Test Error'));
     });
 });

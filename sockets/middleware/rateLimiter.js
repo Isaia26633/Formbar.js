@@ -7,19 +7,19 @@ module.exports = {
         // Rate limiter
         socket.use(([event, ...args], next) => {
             try {
-                const username = socket.request.session.username
+                const email = socket.request.session.email
                 const currentTime = Date.now()
-                var limit = 5
                 const timeFrame = 5000
                 const blockTime = 5000
                 const limitedRequests = ['pollResp', 'help', 'break']
+                let limit = 5
 
-                logger.log('info', `[rate limiter] username=(${username}) currentTime=(${currentTime})`)
-                if (!rateLimits[username]) {
-                    rateLimits[username] = {}
+                logger.log('info', `[rate limiter] email=(${email}) currentTime=(${currentTime})`)
+                if (!rateLimits[email]) {
+                    rateLimits[email] = {}
                 }
 
-                const userRequests = rateLimits[username]
+                const userRequests = rateLimits[email]
                 if (!limitedRequests.includes(event)) {
                     next()
                     return
@@ -28,7 +28,7 @@ module.exports = {
                 userRequests[event] = userRequests[event] || []
                 userRequests[event] = userRequests[event].filter((timestamp) => currentTime - timestamp < timeFrame)
                 logger.log('verbose', `[rate limiter] userRequests=(${JSON.stringify(userRequests)})`)
-                if (event == 'pollResp' && args[0].length > 1 && !args[0].includes('')) {
+                if (event == 'pollResp') {
                     limit = 15
                 }
 

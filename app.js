@@ -3,20 +3,19 @@ const express = require('express')
 const session = require('express-session') // For storing client login data
 const crypto = require('crypto')
 const fs = require('fs')
-const authentication = require('./modules/authentication.js')
 require('dotenv').config(); // For environment variables
+
 // Custom modules
 const { logger } = require('./modules/logger.js')
 const { MANAGER_PERMISSIONS, TEACHER_PERMISSIONS, GUEST_PERMISSIONS, STUDENT_PERMISSIONS, MOD_PERMISSIONS, BANNED_PERMISSIONS } = require('./modules/permissions.js')
 const { classInformation } = require('./modules/class.js')
-const { database } = require('./modules/database.js')
 const { initSocketRoutes } = require('./sockets/init.js')
 const { app, io, http, getIpAccess } = require('./modules/webServer.js')
-const { upgradeDatabase } = require('./data_upgrader/dataUpgrader.js')
-const { SocketUpdates, userSockets } = require('./modules/socketUpdates.js')
-
-// Upgrade the database if it's not up to date
-upgradeDatabase();
+const authentication = require('./modules/authentication.js')
+const { settings } = require('./modules/config.js');
+const { configPlugins, plugins } = require('./modules/plugins.js')
+const { dir } = require('console');
+const { config } = require('dotenv');
 
 // Set EJS as our view engine
 app.set('view engine', 'ejs')
@@ -50,16 +49,6 @@ app.use('/js/floating-ui-dom.js', express.static(__dirname + '/node_modules/@flo
 app.use('/js/monaco-loader.js', express.static(__dirname + '/node_modules/monaco-editor/min/vs/loader.js'))
 app.use('/js/vs', express.static(__dirname + '/node_modules/monaco-editor/min/vs'))
 
-// Get the current poll id
-database.get('SELECT MAX(id) FROM poll_history', (err, pollHistory) => {
-	if (err) {
-		logger.log('error', err.stack)
-	} else {
-		// Set the current poll id to the maximum id minus one since the database starts poll ids at 1
-		currentPoll = pollHistory['MAX(id)'] - 1
-	}
-})
-
 // Check if an IP is banned
 app.use((req, res, next) => {
 	let ip = req.ip
@@ -81,7 +70,7 @@ app.use((req, res, next) => {
 // Additionally, handle session expiration
 app.use((req, res, next) => {
 	if (req.session.classId || req.session.classId === null) {
-		res.locals.currentUser = classInformation.users[req.session.username];
+		res.locals.currentUser = classInformation.users[req.session.email];
 	}
 
 	res.locals = {
@@ -98,7 +87,6 @@ app.use((req, res, next) => {
 
 // Import HTTP routes
 const routeFiles = fs.readdirSync('./routes/').filter(file => file.endsWith('.js'));
-
 for (const routeFile of routeFiles) {
 	// Skip for now as it will be handled later
 	if (routeFile == '404.js') {
@@ -108,6 +96,9 @@ for (const routeFile of routeFiles) {
 	const route = require(`./routes/${routeFile}`);
 	route.run(app);
 }
+
+// Initialize plugin routes
+configPlugins(app);
 
 // Initialize websocket routes
 initSocketRoutes();

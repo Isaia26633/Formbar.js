@@ -7,7 +7,7 @@ const fs = require('fs')
 module.exports = {
     run(socket, socketUpdates) {
         socket.on('ipUpdate', () => {
-            socketUpdates.ipUpdate(null, socket.request.session.username)
+            socketUpdates.ipUpdate(null, socket.request.session.email)
         })
 
         socket.on('changeIp', (type, id, ip) => {
@@ -170,10 +170,6 @@ module.exports = {
                 const newEnv = data.replace(`${type.toUpperCase()}_ENABLED='${!settings[`${type}Active`]}'`, `${type.toUpperCase()}_ENABLED='${settings[`${type}Active`]}'`)
                 fs.writeFileSync('./.env', newEnv);
             });
-
-            // Old code in case the .env code doesn't work or causes issues
-            // settings[`${type}Active`] = !settings[`${type}Active`]
-            // fs.writeFileSync('./settings.json', JSON.stringify(settings))
 
             let ipList
             if (type == 'whitelist') ipList = whitelistedIps;

@@ -105,8 +105,17 @@
 					//
 					let multiAnswer = ""
 
+					// For answering polls using only the keyboard
+					document.addEventListener('keydown', (event) => {
+						const key = +event.key - 1
+						try {
+							pollForm.children[key].children[0].click()
+						} catch (err) {
+							// Do nothing, this is just to prevent errors when the user presses a key that does not correspond to a poll response
+						}
+					});
 
-					let oldLettRes = '<%- myRes %>'
+					let oldLetterRes = '<%- myRes %>'
 					let oldTextRes = '<%- myTextRes %>'
 
 					let poll = {}
@@ -161,21 +170,42 @@
 								pollDiv.style.display = 'none'
 							}
 
-							if (oldLettRes && document.getElementById(oldLettRes)) {
-								document.getElementById(oldLettRes).checked = true
+							// If the user has responded before on this poll, put their previous responses in the form
+							const resTextBox = document.getElementById("resTextBox")
+							if (!poll.multiRes) {
+								// If the poll isn't multi-res, handle it normally
+								const oldLetterElement = document.getElementById(oldLetterRes)
+								if (oldLetterRes && oldLetterElement) {
+									oldLetterElement.checked = true
+								}
+							} else {
+								// If the poll is multi-res, split the response and check all of them
+								const splitLetterRes = oldLetterRes.split(',')
+								for (const splitLetter of splitLetterRes) {
+									const oldLetterElement = document.getElementById(splitLetter)
+									if (oldLetterElement) {
+										oldLetterElement.checked = true
+									}
+								}
+							}
+
+
+							if (oldTextRes && resTextBox) {
+								resTextBox.value = oldTextRes
 							}
 						}
 					}
+
 					function updatePage() {
 						if (poll.allowedResponses.length > 0) {
 							for (let eachAllowedResponse of poll.allowedResponses) {
-								if (eachAllowedResponse == currentUser.username) {
+								if (eachAllowedResponse == currentUser.email) {
 									updatePageLoop()
 									return
 								}
 							}
 							for (let eachUnallowedResponse of poll.unallowedResponses) {
-								if (eachUnallowedResponse == currentUser.username) {
+								if (eachUnallowedResponse == currentUser.email) {
 									pollForm.innerHTML = `<label class="form-control" id="pollControl" style="--theme-color: hsl(0, 0%, 70%);">You may not answer currently</label>`
 								}
 							}
@@ -193,7 +223,6 @@
 						let textarea = document.getElementById("resTextBox")
 						let lettRes = []
 						let textRes = ''
-						//make something
 
 						//Subtract 2 from radios.length to make sure the bathroom break does not interfere with radio values and lettRes
 						for (let i = 0; i < radios.length; i++) {
@@ -206,13 +235,15 @@
 								lettRes.push(radios[i].value)
 							}
 						}
-						if (lettRes.length == 1) {
+
+						// If the poll isn't multi-res, extract the single response from the array
+						if (lettRes.length == 1 && !poll.multiRes) {
 							lettRes = lettRes[0]
 						}
 
-
-						if (textarea)
+						if (textarea) {
 							textRes = textarea.value
+						}
 
 						// Sends user input to the server
 						socket.emit('pollResp', lettRes, textRes)
@@ -224,14 +255,42 @@
 						if (deepObjectEqual(poll, newPoll)) return
 
 						poll = newPoll
-						if (poll.status) socket.emit('votingRightChange', currentUser.username)
+						if (poll.status) {
+							socket.emit('getCanVote', currentUser.email)
+						}
 						updatePage()
 					})
 
-					if (poll.status) socket.emit('votingRightChange', currentUser.username)
-					socket.on('votingRightChange', (vr) => {
-						votingRight = vr
-						if (vr) {
+					socket.on('pollResp', (voteData) => {
+						const allResponses = document.querySelectorAll('#pollControl input[name="poll"]')
+						const oldLetterElement = document.querySelector(`#pollControl input[value="${voteData.res}"]`);
+
+						// Set all responses to unchecked
+						allResponses.forEach((response) => {
+							if (response.type == 'radio' || response.type == 'checkbox') {
+								response.checked = false;
+							}
+						});
+
+						// Set the correct response to checked
+						if (oldLetterElement && !oldLetterElement.checked) {
+							oldLetterElement.checked = true;
+						}
+
+						if (voteData.textRes) {
+							const resTextBox = document.getElementById("resTextBox");
+							if (resTextBox) {
+								resTextBox.value = voteData.textRes;
+							}
+						}
+					});
+
+					if (poll.status) {
+						socket.emit('getCanVote', currentUser.email)
+					}
+					socket.on('getCanVote', (newVotingRight) => {
+						votingRight = newVotingRight
+						if (newVotingRight) {
 							updatePage()
 						} else {
 							pollForm.innerHTML = `<label class="form-control" id="pollControl" style="--theme-color: hsl(0, 0%, 70%);">You may not answer currently</label>`
@@ -261,7 +320,6 @@
 
 					function help() {
 						let reason = document.getElementById('ticket').value
-						console.log('help')
 						socket.emit('help', reason)
 						document.getElementById('ticket').value = ''
 					}
@@ -296,8 +354,5 @@
 				</script>
 				<% } %>
 
-
-
-					<%- include('../partials/footer_content') %>
-
+				<%- include('../partials/footer_content') %>
 </html>
