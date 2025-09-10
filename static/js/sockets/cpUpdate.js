@@ -1,6 +1,28 @@
 let currentTags = []
 let students = []
 let classId = null
+const permissionOptions = [
+    {
+        name: "Owner",
+        permissionLevel: 5
+    },
+    {
+        name: "Teacher",
+        permissionLevel: 4
+    },
+    {
+        name: "Mod",
+        permissionLevel: 3
+    },
+    {
+        name: "Student",
+        permissionLevel: 2
+    },
+    {
+        name: "Guest",
+        permissionLevel: 1
+    }
+]
 
 // Ask for classroom update and listen for the response
 socket.emit('cpUpdate')
@@ -64,12 +86,12 @@ socket.on('cpUpdate', (newClassroom) => {
         }
     }
 
-    className.textContent = `Class Name: ${newClassroom.className}`
-    classCode.textContent = `Class Code: ${newClassroom.key}`
+    className.innerHTML = `<b>Class Name:</b> ${newClassroom.className}`
+    classCode.innerHTML = `<b>Class Code:</b> ${newClassroom.key}`
 
-    totalUsers.innerText = `Users: ${Object.keys(newClassroom.students).length - studentsOffline}`
+    totalUsers.innerHTML = `<b>Users:</b> ${Object.keys(newClassroom.students).length - studentsOffline}`
     if (newClassroom.poll.prompt != "") {
-        pollCounter.innerText = `Poll Prompt:'${newClassroom.poll.prompt}'`
+        pollCounter.innerText = `Poll Prompt: '${newClassroom.poll.prompt}'`
     } else {
         pollCounter.innerText = `Poll Prompt:`
     }
@@ -99,7 +121,9 @@ socket.on('cpUpdate', (newClassroom) => {
 
     responsesCounter.innerText = `Total Responses: ${responseCount} out of ${totalResponders}`;
 
-    for (const email of Object.keys(newClassroom.students)) {
+    const studentEmails = Object.keys(newClassroom.students);
+    validateStudents(studentEmails);
+    for (const email of studentEmails) {
         let studentElement = document.getElementById(`student-${email}`)
         let oldStudentData = null
         let newStudentData = newClassroom.students[email]
@@ -126,7 +150,7 @@ socket.on('cpUpdate', (newClassroom) => {
         studentElement.replaceWith(buildStudent(newClassroom, newStudentData))
     }
 
-    totalUsers.innerText = `Users: ${Object.keys(newClassroom.students).length - studentsOffline - 1}`
+    totalUsers.innerHTML = `<b>Users:</b> ${Object.keys(newClassroom.students).length - studentsOffline - 1}`
 
     for (let studentElement of document.getElementsByClassName('student')) {
         if (!newClassroom.students[studentElement.id.replace('student-', '')]) {
@@ -184,37 +208,15 @@ socket.on('cpUpdate', (newClassroom) => {
         }
     }
 
-    const permissionOptions = [
-        {
-            name: "Owner",
-            permissionLevel: 5
-        },
-        {
-            name: "Teacher",
-            permissionLevel: 4
-        },
-        {
-            name: "Mod",
-            permissionLevel: 3
-        },
-        {
-            name: "Student",
-            permissionLevel: 2
-        },
-        {
-            name: "Guest",
-            permissionLevel: 1
-        }
-    ]
-
     if (!deepObjectEqual(classroom?.permissions, newClassroom.permissions)) {
         permissionsDiv.innerHTML = ''
         for (let [permission, permissionLevel] of Object.entries(newClassroom.permissions)) {
             let permissionLabel = document.createElement('label')
+            permissionLabel.className = 'permissionLabel revampDiv'
             permissionLabel.textContent = camelCaseToNormal(permission)
 
             let permissionSelect = document.createElement('select')
-            permissionSelect.className = 'permissionSelect'
+            permissionSelect.className = 'permissionSelect revampButton'
             permissionSelect.id = permission
             permissionSelect.onchange = (event) => {
                 let select = event.target
@@ -239,12 +241,14 @@ socket.on('cpUpdate', (newClassroom) => {
 
         let newTagDiv = document.createElement('div')
         let newTag = document.createElement('textarea')
+        newTag.className = 'revampButton revampWithText'
         newTag.type = 'text'
-        newTag.placeholder = 'Add Tag (Seperate With Comma for Multiple)'
+        newTag.placeholder = 'Add Tag (tag1, tag2, ...)'
         newTag.style.height = "5.5vh"
 
         let addTagButton = document.createElement('button')
-        addTagButton.textContent = '✔'
+        addTagButton.className = 'circularButton'
+        addTagButton.innerHTML = '<img src="/img/checkmark-outline.svg">'
         addTagButton.onclick = () => {
             if (newTag.value.includes(',')) {
                 let tags = newTag.value.split(',')
@@ -271,5 +275,4 @@ socket.on('cpUpdate', (newClassroom) => {
     filterSortChange(newClassroom)
 
     classroom = newClassroom
-    socket.emit('customPollUpdate')
 })

@@ -1,6 +1,8 @@
-const { classInformation } = require('./class')
-const { database } = require('./database')
+const { classInformation } = require('./class/classroom')
+const { database, dbGetAll, dbGet, dbRun} = require('./database')
 const { logger } = require('./logger')
+const { userSockets, managerUpdate, SocketUpdates} = require("./socketUpdates");
+const { userSocketUpdates } = require("../sockets/init");
 
 /**
  * Asynchronous function to get the current user's data.
@@ -13,7 +15,7 @@ async function getUser(api) {
         logger.log('info', `[getUser]`)
 
         // Get the email associated with the API key in the request headers
-        let email = await getemail(api)
+        let email = await getEmailFromAPIKey(api)
 
         // If the email is an instance of Error, throw the error
         if (email instanceof Error) throw email
@@ -59,11 +61,11 @@ async function getUser(api) {
 
             // If the user is in a class, query the database for the user's data and class permissions
             database.get(
-                'SELECT users.id, users.email, users.permissions, CASE WHEN users.id = classroom.owner THEN 5 ELSE classusers.permissions END AS classPermissions FROM users INNER JOIN classusers ON users.id = classusers.studentId OR users.id = classroom.owner INNER JOIN classroom ON classusers.classId = classroom.id WHERE classroom.id = ? AND users.email = ?',
+                'SELECT users.id, users.email, users.permissions, CASE WHEN users.id = classroom.owner THEN 5 ELSE classusers.permissions END AS classPermissions FROM users JOIN classroom ON classroom.id = ? LEFT JOIN classusers ON classusers.classId = classroom.id AND classusers.studentId = users.id WHERE users.email = ?;',
                 [classId, email],
                 (err, dbUser) => {
                     try {
-                        // If an error occurs, throw the error
+                        // If an error occurs,g throw the error
                         if (err) throw err
 
                         // If no user is found, resolve the promise with an error object
@@ -91,9 +93,8 @@ async function getUser(api) {
             ...dbUser,
             help: null,
             break: null,
-            quizScore: null,
             pogMeter: null,
-            class: classId
+            classId: classId
         }
 
         // If the user is in a class and is logged in
@@ -104,7 +105,6 @@ async function getUser(api) {
                 userData.loggedIn = true
                 userData.help = cdUser.help
                 userData.break = cdUser.break
-                userData.quizScore = cdUser.quizScore
                 userData.pogMeter = cdUser.pogMeter
             }
         }
@@ -118,6 +118,81 @@ async function getUser(api) {
         // If an error occurs, return the error
         return err
     }
+}
+
+async function deleteUser(userId, socket, socketUpdates) {
+    try {
+        logger.log('info', `[deleteUser] ip=(${socket.handshake.address}) session=(${JSON.stringify(socket.request.session)})`)
+        logger.log('info', `[deleteUser] userId=(${userId})`)
+        if (!socketUpdates) {
+            socketUpdates = new SocketUpdates(socket);
+        }
+
+        const user = await new Promise((resolve, reject) => {
+            database.get('SELECT * FROM users WHERE id=?', userId, (err, user) => {
+                if (err) reject(err)
+                resolve(user)
+            })
+        })
+
+        if (!user) {
+            socket.emit('message', 'User not found')
+            return
+        }
+
+        const userSocketsMap = userSockets[user.email];
+        const usersSocketUpdates = userSocketUpdates[user.email];
+        if (userSocketsMap && usersSocketUpdates) {
+            const anySocket = Object.values(userSocketsMap)[0];
+            if (anySocket) {
+                usersSocketUpdates.logout(anySocket);
+            }
+        }
+
+        try {
+            await dbRun('BEGIN TRANSACTION')
+
+            await Promise.all([
+                dbRun('DELETE FROM users WHERE id=?', userId),
+                dbRun('DELETE FROM classusers WHERE studentId=?', userId),
+                dbRun('DELETE FROM shared_polls WHERE userId=?', userId),
+            ])
+
+            await socketUpdates.deleteCustomPolls(userId)
+            await socketUpdates.deleteClassrooms(userId)
+
+            const activeClass = classInformation.users[user.email].activeClass;
+            const classroom = classInformation.classrooms[activeClass];
+            delete classInformation.users[user.email];
+            if (classroom) {
+                delete classroom.students[user.email];
+                socketUpdates.classPermissionUpdate(activeClass);
+            }
+
+
+            await dbRun('COMMIT')
+            await managerUpdate()
+            socket.emit('message', 'User deleted successfully')
+        } catch (err) {
+            await dbRun('ROLLBACK')
+            throw err
+        }
+    } catch (err) {
+        logger.log('error', err.stack);
+    }
+}
+
+/**
+ * Gets the classes a user owns from their email.
+ * @param email
+ * @param socket
+ */
+async function getUserOwnedClasses(email, socket) {
+    logger.log('info', `[getOwnedClasses] ip=(${socket.handshake.address}) session=(${JSON.stringify(socket.request.session)})`);
+    logger.log('info', `[getOwnedClasses] email=(${email})`);
+
+    const userId = (await dbGet('SELECT id FROM users WHERE email = ?', [email])).id;
+    return await dbGetAll('SELECT * FROM classroom WHERE owner=?', [userId]);
 }
 
 /**
@@ -159,10 +234,10 @@ function getUserClass(email) {
  * @param {string} api - The API key.
  * @returns {Promise<string|Object>} A promise that resolves to the email or an error object.
  */
-async function getemail(api) {
+async function getEmailFromAPIKey(api) {
     try {
         // If no API key is provided, return an error
-        if (!api) return { error: 'missing api' }
+        if (!api) return { error: 'Missing API key' }
 
         // Query the database for the email associated with the API key
         let user = await new Promise((resolve, reject) => {
@@ -176,7 +251,7 @@ async function getemail(api) {
 
                         // If no user is found, resolve the promise with an error object
                         if (!user) {
-                            resolve({ error: 'user not found' })
+                            resolve({ error: 'User not found' })
                             return
                         }
 
@@ -204,6 +279,8 @@ async function getemail(api) {
 
 module.exports = {
     getUser,
+    deleteUser,
+    getUserOwnedClasses,
     getUserClass,
-    getemail
+    getEmailFromAPIKey
 }

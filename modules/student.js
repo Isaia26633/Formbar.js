@@ -1,4 +1,4 @@
-const { classInformation } = require("./class");
+const { classInformation } = require("./class/classroom");
 const { database } = require("./database")
 const { STUDENT_PERMISSIONS } = require("./permissions")
 const { logger } = require("./logger");
@@ -20,7 +20,7 @@ class Student {
 	) {
 		this.email = email;
 		this.id = id;
-		this.activeClasses = [];
+		this.activeClass = null;
 		this.permissions = permissions;
 		this.classPermissions = null;
 		this.tags = tags;
@@ -33,7 +33,6 @@ class Student {
 		};
 		this.help = false;
 		this.break = false;
-		this.quizScore = '';
 		this.API = API;
 		this.pogMeter = 0;
 		this.displayName = displayName;
@@ -107,6 +106,11 @@ async function getStudentsInClass(classId) {
 	return students;
 }
 
+/**
+ * Retrieves a student's id from their email
+ * @param email
+ * @returns {Promise|Number}
+ */
 function getStudentId(email) {
 	try {
 		// If the user is already loded, return the id

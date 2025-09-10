@@ -6,6 +6,17 @@ const userBreak = []
 // Stores the currently opened student elements
 let opendetails = []
 
+// Checks if all the student boxes are of students currently in the classroom
+function validateStudents(students) {
+    for (const student of usersDiv.children) {
+        if (!student.id) continue;
+
+        if (!students.includes(student.id.replace('student-', '')) && student.id !== 'student-fake') {
+            student.remove()
+        }
+    }
+}
+
 // Create a student in the user list
 function buildStudent(classroom, studentData) {
     const studentTemplateDiv = document.getElementById('student-fake')
@@ -81,14 +92,10 @@ function buildStudent(classroom, studentData) {
             deleteTicketButton.dataset.studentName = studentData.email
             deleteTicketButton.onclick = (event) => {
                 deleteTicket(event.target)
-                helpSoundPlayed = false;
             }
             deleteTicketButton.textContent = 'Delete Ticket'
 
             helpReason.appendChild(deleteTicketButton)
-
-            helpSound()
-
         }
 
         if (studentData.break == true) {
@@ -105,7 +112,6 @@ function buildStudent(classroom, studentData) {
             approveBreakButton.dataset.studentName = studentData.email
             approveBreakButton.onclick = (event) => {
                 approveBreak(true, studentData.email)
-                breakSoundPlayed = false;
             }
             approveBreakButton.textContent = 'Approve Break'
 
@@ -119,8 +125,6 @@ function buildStudent(classroom, studentData) {
 
             breakReason.appendChild(approveBreakButton)
             breakReason.appendChild(denyBreakButton)
-
-            breakSound()
         }
 
         if (studentData.break) {
@@ -128,7 +132,6 @@ function buildStudent(classroom, studentData) {
             div.textContent = '⏱'
             alertSpan.appendChild(div)
             newStudent.classList.add('break')
-            breakSound()
         }
 
 
@@ -137,7 +140,7 @@ function buildStudent(classroom, studentData) {
             strPerms = strPerms[permission - 1]
             let permSwitch = document.createElement('button')
             permSwitch.setAttribute("name", "permSwitch");
-            permSwitch.setAttribute("class", "permSwitch");
+            permSwitch.setAttribute("class", "permSwitch revampButton");
             permSwitch.setAttribute("data-email", studentData.email);
             permSwitch.onclick = (event) => {
                 socket.emit('classPermChange', studentData.email, Number(permission))
@@ -230,7 +233,7 @@ function buildStudent(classroom, studentData) {
 
         // Ban and Kick buttons
         let banStudentButton = document.createElement('button')
-        banStudentButton.className = 'banUser quickButton'
+        banStudentButton.className = 'banUser quickButton revampButton warningButton'
         banStudentButton.setAttribute('data-user', studentData.email)
         banStudentButton.textContent = 'Ban User'
         banStudentButton.onclick = (event) => {
@@ -240,7 +243,7 @@ function buildStudent(classroom, studentData) {
         }
         extraButtons.appendChild(banStudentButton)
         let kickUserButton = document.createElement('button')
-        kickUserButton.className = 'kickUser quickButton'
+        kickUserButton.className = 'kickUser quickButton revampButton warningButton'
         kickUserButton.setAttribute('data-userid', studentData.email)
         kickUserButton.onclick = (event) => {
             if (confirm(`Are you sure you want to kick ${studentData.email}?`)) {
@@ -250,7 +253,7 @@ function buildStudent(classroom, studentData) {
         kickUserButton.textContent = 'Kick User'
         extraButtons.appendChild(kickUserButton)
 
-        if (pollBox.textContent == '' && helpReason.textContent == '' && breakReason.textContent == '') {
+        if (helpReason.textContent == '' && breakReason.textContent == '') {
             reasonsDiv.style.display = 'none'
         }
         return newStudent
@@ -459,65 +462,4 @@ function deleteTicket(e) {
 
 function approveBreak(breakApproval, email) {
     socket.emit('approveBreak', breakApproval, email)
-}
-
-let helpSoundPlayed = false;
-let breakSoundPlayed = false;
-let responseSoundPlayed = false;
-
-async function cacheSounds() {
-    try {
-        const cache = await caches.open('audio-cache');
-        const urls = [
-            '/sfx/help.wav',
-            '/sfx/break.wav',
-            '/sfx/TUTD.wav'
-        ];
-
-        await Promise.all(urls.map(async url => {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch ${url}`);
-            }
-            await cache.put(url, response.clone());
-            console.log(`Cached ${url}`);
-        }));
-    } catch (error) {
-        console.error('Error caching sounds:', error);
-    }
-}
-
-async function playCachedSound(soundFile) {
-    try {
-        const cache = await caches.open('audio-cache');
-        const response = await cache.match(`/sfx/${soundFile}`);
-        if (response) {
-            const blob = await response.blob();
-            const audio = new Audio(URL.createObjectURL(blob));
-            audio.play();
-            console.log(`Playing cached sound: ${soundFile}`);
-        } else {
-            console.error(`Sound file ${soundFile} not found in cache`);
-        }
-    } catch (error) {
-        console.error('Error playing cached sound:', error);
-    }
-}
-
-function helpSound() {
-    if (!helpSoundPlayed) {
-        if (mute == false) {
-            playCachedSound('help.wav')
-            helpSoundPlayed = true;
-        }
-    }
-}
-
-function breakSound() {
-    if (!breakSoundPlayed) {
-        if (mute == false) {
-            playCachedSound('break.wav');
-            breakSoundPlayed = true;
-        }
-    }
 }

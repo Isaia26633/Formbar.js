@@ -1,6 +1,6 @@
-const { database } = require("./database")
-const { logger } = require("./logger")
-const { MOD_PERMISSIONS, STUDENT_PERMISSIONS } = require("./permissions");
+const { database, dbGet, dbRun} = require("../database")
+const { logger } = require("../logger")
+const { MOD_PERMISSIONS, STUDENT_PERMISSIONS } = require("../permissions");
 
 const classInformation = createClassInformation();
 
@@ -13,7 +13,6 @@ class Classroom {
 		this.className = className
 		this.isActive = false
 		this.students = {}
-		this.owner = "NotImplemented";
 		this.sharedPolls = sharedPolls || []
 		this.poll = {
 			status: false,
@@ -26,9 +25,7 @@ class Classroom {
 			studentBoxes: [],
 			allowedResponses: []
 		}
-		this.plugins = plugins
 		this.key = key
-		this.mode = 'poll'
 		this.permissions = permissions
 		this.pollHistory = pollHistory || []
 		this.tagNames = tags || ['Offline'];
@@ -116,7 +113,6 @@ async function getClassUsers(user, key) {
 				...user,
 				help: null,
 				break: null,
-				quizScore: null,
 				pogMeter: null
 			}
 
@@ -127,7 +123,6 @@ async function getClassUsers(user, key) {
 				classUsers[user.email].loggedIn = true
 				classUsers[user.email].help = cdUser.help
 				classUsers[user.email].break = cdUser.break
-				classUsers[user.email].quizScore = cdUser.quizScore
 				classUsers[user.email].pogMeter = cdUser.pogMeter
 			}
 
@@ -150,7 +145,6 @@ async function getClassUsers(user, key) {
 				delete classUsers[user.email].classPermissions
 				delete classUsers[user.email].help
 				delete classUsers[user.email].break
-				delete classUsers[user.email].quizScore
 				delete classUsers[user.email].pogMeter
 			}
 		}
@@ -192,7 +186,7 @@ function getClassIDFromCode(code) {
 
 module.exports = {
     Classroom,
-    getClassUsers,
+	getClassUsers,
 	getClassIDFromCode,
 
     // classInformation stores all of the information on classes and students

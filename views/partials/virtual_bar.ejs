@@ -38,13 +38,25 @@
             maintainAspectRatio: false,
             plugins: {
                 legend: {
+                    display: false,
                     labels: {
                         font: {
                             size: (document.documentElement.clientWidth + document.documentElement.clientHeight) / 100
                         },
-                        color: 'grey'
+                        color: 'black'
                     }
-
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return context.dataset.label;
+                        }
+                    }
+                }
+            },
+            elements: {
+                arc: {
+                    borderColor: "black"
                 }
             },
             cutout: '0%',
@@ -154,7 +166,8 @@
             virtualBar.parentElement.style.display = "block";
             if (time > 0) {
                 pieChart.data = [time, timePassed]
-                doughnutChart.data.datasets[1].label = timeString
+                doughnutChart.data.datasets[1].label = `${minutes}:${seconds}`
+                doughnutChart.data.label = `${minutes}:${seconds}`
                 pieChart.backgroundColor = ["blue", "white"]
             } else {
                 pieChart.data = [timePassed]

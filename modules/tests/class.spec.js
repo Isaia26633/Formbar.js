@@ -1,4 +1,4 @@
-const { getClassIDFromCode, getClassUsers, classInformation} = require('../class');
+const { getClassIDFromCode, getClassUsers, classInformation} = require('../class/classroom');
 const { database } = require("../database");
 const { testData } = require("./tests");
 
@@ -39,7 +39,6 @@ it('should get class users', async () => {
             classPermissions: 1,
             help: null,
             break: null,
-            quizScore: null,
             pogMeter: null
         }
     });

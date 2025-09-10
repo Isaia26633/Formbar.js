@@ -8,14 +8,11 @@ require('dotenv').config(); // For environment variables
 // Custom modules
 const { logger } = require('./modules/logger.js')
 const { MANAGER_PERMISSIONS, TEACHER_PERMISSIONS, GUEST_PERMISSIONS, STUDENT_PERMISSIONS, MOD_PERMISSIONS, BANNED_PERMISSIONS } = require('./modules/permissions.js')
-const { classInformation } = require('./modules/class.js')
+const { classInformation } = require('./modules/class/classroom.js')
 const { initSocketRoutes } = require('./sockets/init.js')
 const { app, io, http, getIpAccess } = require('./modules/webServer.js')
-const authentication = require('./modules/authentication.js')
 const { settings } = require('./modules/config.js');
-const { configPlugins, plugins } = require('./modules/plugins.js')
-const { dir } = require('console');
-const { config } = require('dotenv');
+const authentication = require('./routes/middleware/authentication.js')
 
 // Set EJS as our view engine
 app.set('view engine', 'ejs')
@@ -96,9 +93,6 @@ for (const routeFile of routeFiles) {
 	const route = require(`./routes/${routeFile}`);
 	route.run(app);
 }
-
-// Initialize plugin routes
-configPlugins(app);
 
 // Initialize websocket routes
 initSocketRoutes();

@@ -1,4 +1,4 @@
-const { classInformation } = require("../modules/class")
+const { classInformation } = require("../modules/class/classroom")
 const { logger } = require("../modules/logger")
 const { advancedEmitToClass } = require("../modules/socketUpdates")
 const { io } = require("../modules/webServer")
@@ -22,7 +22,7 @@ module.exports = {
 
                 // Get the student, play the break sound, and set the break reason
                 const student = classInformation.classrooms[classId].students[email];
-                advancedEmitToClass('breakSound', classId, { api: true });
+                advancedEmitToClass('breakSound', classId, {});
                 student.break = reason;
 
                 logger.log('verbose', `[requestBreak] user=(${JSON.stringify(classInformation.classrooms[classId].students[email])})`);
