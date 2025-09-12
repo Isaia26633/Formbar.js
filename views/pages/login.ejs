@@ -35,7 +35,7 @@
                     <a href="/changepassword" id="forgotPassword" class="quickButton loginBox revampButton">Forgot password</a>
                 </form>
 
-                <button class="gsi-material-button" id="googleOAuthButton" onclick="loginWithGoogle()">
+                <!-- <button class="gsi-material-button" id="googleOAuthButton" onclick="loginWithGoogle()">
                     <div class="gsi-material-button-state"></div>
                     <div class="gsi-material-button-content-wrapper">
                         <div class="gsi-material-button-icon">
@@ -59,7 +59,7 @@
                         <span class="gsi-material-button-contents">Sign in with Google</span>
                         <span style="display: none;">Sign in with Google</span>
                     </div>
-                </button>
+                </button> -->
             </div>
     </body>
 
@@ -167,11 +167,11 @@
 
         changeloginType(loginButton);
 
-        <% if (!googleOauthEnabled) { %>
-            const googleOAuthButton = document.getElementById('googleOAuthButton');
-            const orText = document.getElementById('orText')
-            googleOAuthButton.style.display = 'none';
-            orText.style.display = 'none';
-        <% } %>
+        // <% if (!googleOauthEnabled) { %>
+        //     const googleOAuthButton = document.getElementById('googleOAuthButton');
+        //     const orText = document.getElementById('orText')
+        //     googleOAuthButton.style.display = 'none';
+        //     orText.style.display = 'none';
+        // <% } %>
     </script>
 </html>
