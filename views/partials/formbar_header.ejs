@@ -9,7 +9,7 @@
 	<% if (locals.currentUser) { %>
 		<ul>
 		<% if (currentUser && currentUser.activeClass != null) { %>
-           <li><a href=<%- currentUser.classPermissions >= 4 ? "/controlPanel" : "/student" %> class="headerTab revampButton">Panel</a></li>
+           <li><a href=<%- currentUser.classPermissions >= 4 ? "/controlPanel" : "/student" %> class="headerTab revampButton">Control Panel</a></li>
     	<% } %>
 		<% if (currentUser.permissions>= MANAGER_PERMISSIONS) { %>
 			<li>
@@ -27,7 +27,7 @@
 				<button href="/" class="headerTab revampButton" title="Classes" onclick="leaveClass()">Classes</button>
 			</li>
 			<li>
-				<button href="/" class="headerTab revampButton" title="Leave Class" onclick="leaveClassroom()">Leave Class</button>
+				<button href="/" class="headerTab revampButton" title="Leave Class" onclick="leaveRoom()">Leave Room</button>
 			</li>
 		<% } %>
 	<% } %>
@@ -54,7 +54,6 @@
 			<img id="logoutIcon" src="/img/logout.svg" title="Logout">
 		</button>
 	<% } %>
-
 </header>
 <script>
 function doFullscreen() {
@@ -122,16 +121,38 @@ function logout() {
     }
   }
 
-function leaveClassroom() {
-	if (confirm('Are you sure you want to leave the classroom?')) { 
-	socket.emit('leaveClassroom') 
-	}
-}
+
+  function leaveRoom() {
+    if (confirm('Are you sure you want to leave the classroom?')) { 
+      socket.emit('leaveRoom')
+    }
+  }
 
   if (currentUser && currentUser.activeClass != null && currentUser.permissions >= MOD_PERMISSIONS) {
       const muteButton = document.getElementById("muteButton");
       muteButton.style.display = "block";
   }
 </script>
+
+<div id="errorDialog">
+	<img src="/img/close-circle.svg" alt="Error Icon">
+	<div class="errorDetails">
+		<p id="errorMessage"></p>
+		<!-- <p id="errorCode">0x23</p> An idea, may not be needed but might help in future. --> 
+	</div>
+</div>
+
+<% if(locals.errorMessage) { %>
+	<script>
+		const errorDialog = document.getElementById('errorDialog');
+		const errorMessage = document.getElementById('errorMessage');
+
+		errorMessage.innerText = "<%- errorMessage %>";
+		errorDialog.classList.add('shown');
+		setTimeout(() => {
+			errorDialog.classList.remove('shown');
+		}, 2000);
+	</script>
+<% } %>
 
 <%- include('./mobile_dialogs.ejs') %>

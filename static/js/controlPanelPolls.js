@@ -276,7 +276,7 @@ function responseAmountChange(responseAmount = null) {
 			colorPickerDiv,
 			() => {
 				FloatingUIDOM.computePosition(colorPickerButton, colorPickerDiv, {
-					placement: 'bottom',
+					placement: 'right-end',
 					middleware: [FloatingUIDOM.offset(10), FloatingUIDOM.flip()]
 				})
 					.then(({ x, y }) => {
@@ -390,23 +390,6 @@ function removeAnswer(event) {
     responseSoundPlayed = false;
 }
 
-function modeChange() {
-	let modeP = document.getElementById('modeP')
-	let modeL = document.getElementById('modeL')
-	let modeQ = document.getElementById('modeQ')
-	let modePT = document.getElementById('modePT')
-
-	if (modeP.checked) {
-		socket.emit('modeChange', modeP.value)
-	} else if (modeL.checked) {
-		socket.emit('modeChange', modeL.value)
-	} else if (modeQ.checked) {
-		socket.emit('modeChange', modeQ.value)
-	} else if (modePT.checked) {
-		socket.emit('modeChange', modePT.value)
-	}
-}
-
 // Ends the poll and reloads the users page to stop any more submission
 function clearPollFunc() {
 	socket.emit('clearPoll')
@@ -421,9 +404,9 @@ function endPollFunc() {
 // Starts a new poll that allows students to submit answers
 // Check how many possible responses and if the teacher wants to accept text responses\
 function startPoll(customPollId) {
-	socket.emit('cpUpdate')
-	socket.on('cpUpdate', (newClassroom) => {
-		rooms = newClassroom
+	socket.emit('classUpdate')
+	socket.on('classUpdate', (classroomData) => {
+		rooms = classroomData
 	})
 	let userTags = []
 	let userBoxesChecked = []
@@ -469,19 +452,34 @@ function startPoll(customPollId) {
 
 	if (customPollId) {
 		let customPoll = customPolls[customPollId]
-
 		changeTab('mainPolls', 'polls')
 
-		let generatedColors = generateColors(customPoll.answers.length)
-		socket.emit('startPoll', customPoll.answers.length, customPoll.textRes, customPoll.prompt, customPoll.answers, customPoll.blind, customPoll.weight, userTags, userBoxesChecked, userIndeterminate, false)
+        socket.emit('startPoll', {
+            prompt: customPoll.prompt,
+            pollOptions: customPoll.answers,
+            allowTextResponses: customPoll.textRes,
+            allowMultipleResponses: false,
+            isBlind: customPoll.blind,
+            weight: customPoll.weight,
+            tags: userTags,
+            indeterminate: customPoll.indeterminate,
+            studentsAllowedToVote: userBoxesChecked,
+        });
 	} else {
 		let blind = blindCheck.checked
 
-
-		let generatedColors = generateColors(resNumber.value)
-
-		socket.emit('startPoll', resNumber.value, resTextBox.checked, pollPrompt.value, pollAnswers, blind, 1, userTags, userBoxesChecked, userIndeterminate, multiRes.checked)
-	}
+        socket.emit('startPoll', {
+            prompt: pollPrompt.value,
+            pollOptions: pollAnswers,
+            allowTextResponses: resTextBox.checked,
+            allowMultipleResponses: false,
+            isBlind: blind,
+            weight: 1,
+            tags: userTags,
+            indeterminate: userIndeterminate,
+            studentsAllowedToVote: userBoxesChecked,
+        });
+    }
 	clearPoll.style.display = 'block'
 	endPoll.style.display = 'block'
 	changeTab('usersMenu', 'mainTabs')
@@ -501,8 +499,6 @@ function editCustomPoll(customPollId) {
 	resTextBox.checked = customPoll.textRes
 
 	responseAmountChange(customPoll.answers.length)
-
-	console.log(customPoll)
 
 	let answerInputs = document.getElementsByClassName('answerName')
 	for (let pollIndex = 0; pollIndex < customPoll.answers.length; pollIndex++) {
@@ -536,7 +532,7 @@ function savePoll() {
 	let customPoll = customPolls[editingPollId]
 
 	customPoll.blind = blindCheck.checked
-	customPoll.prompt = pollPrompt.value
+	customPoll.prompt = prompt.value
 	customPoll.textRes = resTextBox.checked
 
 	let pollAnswers = []
@@ -744,6 +740,15 @@ document.addEventListener('click', (event) => {
 			colorPickersDiv[i].style.display = 'none'
 		}
 	}
+	if(
+		!event.target.closest('details.controlStudent') &&
+		!event.target.classList.contains('controlStudent')
+	) {
+		let controlStudents = document.getElementsByClassName('controlStudent')
+		for(let controlStudent of controlStudents) {
+			controlStudent.open = false
+		}
+	}
 })
 
 //Make the code above work
@@ -759,8 +764,6 @@ timerButton.addEventListener('click', function () {
 	}
 	socket.emit("timer", time.value * 60 + Number(timeS.value), true)
 	timerButton.hidden = true
-	time.hidden = true
-	timeS.hidden = true
 	timerStopButton.hidden = false
 })
 
@@ -769,8 +772,6 @@ timerStopButton.addEventListener('click', function () {
 	timerButton.hidden = false
 	time.value = ''
 	timeS.value = ''
-	time.hidden = false
-	timeS.hidden = false
 	timerStopButton.hidden = true
 	socket.emit("timer", { turnedOn: false })
 })
