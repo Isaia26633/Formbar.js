@@ -403,19 +403,25 @@ function addAnswer() {
 };
 
 function removeAnswer(event) {
-    let element = event.target.parentElement;
-    let elementId = element.id.split('response')[1];
-    element.remove();
-    pollResponses.splice(elementId, 1);
-    responseDivs = document.getElementsByClassName('response');
-    answerNames = document.getElementsByClassName('answerName');
-    for (let i = 0; i < responseDivs.length; i++) {
-        responseDivs[i].id = `response${i}`;
-        answerNames[i].placeholder = `Answer ${letterString[i]}`;
+	let element = event.target.parentElement;
+
+	if(responsesDiv.childElementCount == 1) { 
+        let removeOnly = confirm("Are you sure you want to remove the only response?");
+
+        if(!removeOnly) return;
     }
-    resNumber.value = parseInt(resNumber.value) - 1;
-    responseSoundPlayed = false;
-}
+
+	let elementId = element.id.split('response')[1];
+	element.remove();
+	pollResponses.splice(elementId, 1);
+	responseDivs = document.getElementsByClassName('response');
+	answerNames = document.getElementsByClassName('answerName');
+	for (let i = 0; i < responseDivs.length; i++) {
+		responseDivs[i].id = `response${i}`;
+		answerNames[i].placeholder = `Answer ${letterString[i]}`;
+	};
+	resNumber.value = parseInt(resNumber.value) - 1;
+};
 
 // Ends the poll and reloads the users page to stop any more submission
 function clearPollFunc() {
@@ -473,13 +479,17 @@ function startPoll(customPollId) {
 	userIndeterminate.sort()
 	userBreak.sort()
 
+	if(!classroom.isActive) return alert("Please start the class before starting a poll.");
+
 	if (customPollId) {
 		let customPoll
 		if(customPollId == "current") {
 			customPoll = {
 				prompt: pollPrompt.value,
-				isBlind: blindCheck.checked,
+				blind: blindCheck.checked,
+				allowVoteChanges: !!allowVoteChanges.checked,
 				textRes: resTextBox.checked,
+				multiRes: multiRes.checked,
 				answers: pollAnswers,
 				weight: 1,
 				indeterminate: userIndeterminate
@@ -490,24 +500,24 @@ function startPoll(customPollId) {
 
         socket.emit('startPoll', {
             prompt: customPoll.prompt,
-            pollOptions: customPoll.answers,
-            allowTextResponses: customPoll.textRes,
-            allowMultipleResponses: false,
-            isBlind: customPoll.blind,
+            answers: customPoll.answers,
+            allowTextResponses: !!customPoll.textRes,
+            allowMultipleResponses: customPoll.multiRes,
+			allowVoteChanges: !!customPoll.allowVoteChanges,
+            blind: !!customPoll.blind,
             weight: customPoll.weight,
             tags: userTags,
             indeterminate: customPoll.indeterminate,
             studentsAllowedToVote: userBoxesChecked,
         });
 	} else {
-		let blind = blindCheck.checked
-
         socket.emit('startPoll', {
             prompt: pollPrompt.value,
-            pollOptions: pollAnswers,
+            answers: pollAnswers,
             allowTextResponses: resTextBox.checked,
-            allowMultipleResponses: false,
-            isBlind: blind,
+            allowMultipleResponses: multiRes.checked,
+			allowVoteChanges: allowVoteChanges.checked,
+            blind: !!blindCheck.checked,
             weight: 1,
             tags: userTags,
             indeterminate: userIndeterminate,
@@ -522,12 +532,8 @@ function startPoll(customPollId) {
 function editCustomPoll(customPollId) {
 	editingPollId = customPollId
 	let customPoll = customPolls[editingPollId]
-	
 
-	if (customPoll.owner == currentUser.id) {
-		editPollDialog.open = true
-	}
-
+	allowVoteChanges.checked = customPoll.allowVoteChanges
 	blindCheck.checked = customPoll.blind
 	pollPrompt.value = customPoll.prompt
 	resTextBox.checked = customPoll.textRes
@@ -549,87 +555,11 @@ function editCustomPoll(customPollId) {
 	}
 }
 
-function startPollWithoutSaving() {
-	socket.emit('classUpdate')
-	socket.on('classUpdate', (classroomData) => {
-		rooms = classroomData
-	})
-	let userTags = []
-	let userBoxesChecked = []
-	let userIndeterminate = []
-	let pollAnswers = []
-	for (let i = 0; i < resNumber.value; i++) {
-		let pollResponse = pollResponses[i]
-		let pollAnswer = {
-			answer: (pollResponse.answer) ? pollResponse.answer : pollResponse.defaultAnswer,
-			weight: pollResponse.weight,
-			color: (pollResponse.color) ? pollResponse.color : pollResponse.defaultColor
-		}
-		pollAnswer.answer = pollAnswer.answer.replaceAll('"', '“')
-		pollAnswer.answer = pollAnswer.answer.replaceAll(',', '‚')
-		pollAnswers.push(pollAnswer)
-	}
-	let multiRes = document.getElementById("multiRes")
-	let selectTagForm = document.getElementsByName('selectTagForm')
-	let allCheckboxes = document.getElementsByName('studentCheckbox')
-	for (let eachTagForm of selectTagForm[0]) {
-		if (eachTagForm.checked) {
-			//for each tag checked on the teacher's side to determine who can answer the poll, add it to the userTags array
-			userTags.push(eachTagForm.value)
-		}
-	}
-
-	for (let eachBox of allCheckboxes) {
-		if (eachBox.checked && !eachBox.indeterminate) {
-			let boxId = eachBox.id.split('_')[1]
-			userBoxesChecked.push(boxId)
-		}
-		if (eachBox.indeterminate) {
-			let boxId = eachBox.id.split('_')[1]
-			userIndeterminate.push(boxId)
-		}
-	}
-
-
-	userTags.sort()
-	userBoxesChecked.sort()
-	userIndeterminate.sort()
-	userBreak.sort()
-
-	let customPoll = {
-		prompt: pollPrompt.value,
-		isBlind: blindCheck.checked,
-		textRes: resTextBox.checked,
-		answers: pollAnswers,
-		weight: 1,
-		indeterminate: userIndeterminate
-	}
-
-	changeTab('mainPolls', 'polls')
-
-	socket.emit('startPoll', {
-		prompt: customPoll.prompt,
-		pollOptions: customPoll.answers,
-		allowTextResponses: customPoll.textRes,
-		allowMultipleResponses: false,
-		isBlind: customPoll.blind,
-		weight: customPoll.weight,
-		tags: userTags,
-		indeterminate: customPoll.indeterminate,
-		studentsAllowedToVote: userBoxesChecked,
-	});
-	
-	clearPoll.style.display = 'block'
-	endPoll.style.display = 'block'
-	changeTab('usersMenu', 'mainTabs')
-};
-
 function unloadPoll() {
-	editPollDialog.open = false
-
 	pollPrompt.value = ''
 	resTextBox.checked = false
 	blindCheck.checked = false
+	allowVoteChanges.checked = false
 
 	responseAmountChange(1)
 	resetAnswerNames()
@@ -641,6 +571,7 @@ function savePoll() {
 	let customPoll = customPolls[editingPollId]
 
 	customPoll.blind = blindCheck.checked
+	customPoll.allowVoteChanges = allowVoteChanges.checked
 	customPoll.prompt = prompt.value
 	customPoll.textRes = resTextBox.checked
 
@@ -668,6 +599,7 @@ function savePollAs(pollType) {
 		return;
 	} else {
 		customPoll.blind = blindCheck.checked
+		customPoll.allowVoteChanges = allowVoteChanges.checked
 		customPoll.prompt = pollPrompt.value
 		customPoll.textRes = resTextBox.checked
 		customPoll.public = false
@@ -890,13 +822,9 @@ socket.emit('timerOn')
 socket.on('timerOn', function (time) {
 	if (time) {
 		timerButton.hidden = true
-		document.getElementsByClassName('inputtedTime')[0].hidden = true
-		document.getElementsByClassName('inputtedTime')[1].hidden = true
 		timerStopButton.hidden = false
 	} else {
 		timerButton.hidden = false
-		document.getElementsByClassName('inputtedTime')[0].hidden = false
-		document.getElementsByClassName('inputtedTime')[1].hidden = false
 		timerStopButton.hidden = true
 	}
 })

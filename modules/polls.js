@@ -2,10 +2,9 @@ const { classInformation } = require("./class/classroom");
 const { logger } = require("./logger");
 const { generateColors } = require("./util");
 const { advancedEmitToClass } = require("./socketUpdates");
-const { database } = require("./database");
+const { database, dbGetAll, dbRun } = require("./database");
 const { userSocketUpdates } = require("../sockets/init");
 const { MANAGER_PERMISSIONS } = require("./permissions");
-const { log } = require('winston');
 
 // Stores an object containing the pog meter increases for users in a poll
 // This is only stored in an object because Javascript passes objects as references
@@ -13,39 +12,41 @@ const pogMeterTracker = {
     pogMeterIncreased: []
 };
 
-// /**
-//  * Creates a new poll in the class.
-//  * @param pollData
-//  * @param socket
-//  */
+/**
+ * Creates a new poll in the class.
+ * @param {number} classId - The ID of the class.
+ * @param {Object} pollData - The data for the poll.
+ * @param {Object} userSession - The user session object.
+ */
 async function createPoll(classId, pollData, userSession) {
     try {
-        const { prompt, pollOptions, isBlind, tags, studentsAllowedToVote, indeterminate, allowTextResponses, allowMultipleResponses } = pollData;
-        const numberOfResponses = Object.keys(pollOptions).length;
+        const { prompt, answers, blind, tags, studentsAllowedToVote, indeterminate, allowTextResponses, allowMultipleResponses } = pollData;
+        let { weight } = pollData;
+        const numberOfResponses = Object.keys(answers).length;
         const socketUpdates = userSocketUpdates[userSession.email];
         pogMeterTracker.pogMeterIncreased = [];
+
         // Ensure weight is a number and limit it to a maximum of 5 and a minimum of above 0
-        pollData.weight = Math.floor((pollData.weight || 1) * 100) / 100; // Round to 2 decimal places
-        if (!pollData.weight || isNaN(pollData.weight) || pollData.weight <= 0) weight = 1;
-        let weight = pollData.weight > 5 ? 5 : pollData.weight;
+        weight = Math.floor((weight || 1) * 100) / 100; // Round to 2 decimal places
+        if (!weight || isNaN(weight) || weight <= 0) weight = 1;
+        weight = weight > 5 ? 5 : weight;
 
         // Get class id and check if the class is active before continuing
         const classId = userSession.classId;
         if (!classInformation.classrooms[classId] || !classInformation.classrooms[classId].isActive) {
-            // socket.emit('message', 'This class is not currently active.');
             return 'This class is not currently active.';
         }
 
         // Log poll information
         logger.log('info', `[startPoll] session=(${JSON.stringify(userSession)})`)
-        logger.log('info', `[startPoll] allowTextResponses=(${allowTextResponses}) prompt=(${prompt}) pollOptions=(${JSON.stringify(pollOptions)}) isBlind=(${isBlind}) weight=(${weight}) tags=(${tags})`)
+        logger.log('info', `[startPoll] allowTextResponses=(${allowTextResponses}) prompt=(${prompt}) answers=(${JSON.stringify(answers)}) blind=(${blind}) weight=(${weight}) tags=(${tags})`)
 
         await clearPoll(classId, userSession, false)
-        let generatedColors = generateColors(Object.keys(pollOptions).length)
+        let generatedColors = generateColors(Object.keys(answers).length)
         logger.log('verbose', `[pollResp] user=(${classInformation.classrooms[classId].students[userSession.email]})`)
         if (generatedColors instanceof Error) throw generatedColors
 
-        classInformation.classrooms[classId].poll.isBlind = isBlind
+        classInformation.classrooms[classId].poll.blind = blind
         classInformation.classrooms[classId].poll.status = true
 
         if (tags) {
@@ -57,7 +58,14 @@ async function createPoll(classId, pollData, userSession) {
         if (studentsAllowedToVote) {
             classInformation.classrooms[classId].poll.studentsAllowedToVote = studentsAllowedToVote
         } else {
-            classInformation.classrooms[classId].poll.studentsAllowedToVote = Object.keys(classInformation.classrooms[classId].students)
+            classInformation.classrooms[classId].poll.studentsAllowedToVote = [];
+            for (const student of classInformation.classrooms[classId].students) {
+                // If the student has been excluded by permission, is on break, is offline, or has been manually excluded, do not allow them to vote
+                if (classInformation.classrooms[classId].excludedPermissions.includes(student.classPermissions) || student.break || student.tags.includes('Offline') || student.tags.includes('Excluded')) { 
+                    continue;
+                }
+                classInformation.classrooms[classId].poll.studentsAllowedToVote.push(student.id.toString());
+            }
         }
 
         // Creates an object for every answer possible the teacher is allowing
@@ -67,16 +75,18 @@ async function createPoll(classId, pollData, userSession) {
             let weight = 1
             let color = generatedColors[i]
 
-            if (pollOptions[i].answer) {
-                answer = pollOptions[i].answer
+            if (answers[i].answer) {
+                answer = answers[i].answer
             }
 
-            if (pollOptions[i].weight) {
-                weight = pollOptions[i].weight
+            if (answers[i].weight) {
+                if (isNaN(answers[i].weight) || answers[i].weight <= 0) weight = 1
+                weight = Math.floor(answers[i].weight * 100) / 100
+                weight = weight > 5 ? 5 : weight
             }
 
-            if (pollOptions[i].color) {
-                color = pollOptions[i].color
+            if (answers[i].color) {
+                color = answers[i].color
             }
 
             classInformation.classrooms[classId].poll.responses[answer] = {
@@ -104,6 +114,11 @@ async function createPoll(classId, pollData, userSession) {
     }
 }
 
+/**
+ * Ends the current poll in the specified class, saves poll data to history, and updates the class state.
+ * @param {number} classId - The ID of the class.
+ * @param {Object} userSession - The user session object.
+ */
 async function endPoll(classId, userSession) {
     try {
         logger.log('info', `[endPoll] session=(${JSON.stringify(userSession)})`)
@@ -115,7 +130,7 @@ async function endPoll(classId, userSession) {
         data.prompt = classInformation.classrooms[classId].poll.prompt
         data.responses = classInformation.classrooms[classId].poll.responses
         data.allowMultipleResponses = classInformation.classrooms[classId].poll.allowMultipleResponses
-        data.isBlind = classInformation.classrooms[classId].poll.isBlind
+        data.blind = classInformation.classrooms[classId].poll.blind
         data.allowTextResponses = classInformation.classrooms[classId].poll.allowTextResponses
 
         for (const key in classInformation.classrooms[classId].students) {
@@ -164,10 +179,14 @@ async function endPoll(classId, userSession) {
 }
 
 /**
- * Clears the current poll from the class
- * @param TODO
+ * Clears the current poll in the specified class, optionally updates the class state,
+ * and saves poll answers to the database.
+ *
+ * @param {number} classId - The ID of the class.
+ * @param {Object} userSession - The user session object.
+ * @param {boolean} [updateClass=true] - Whether to update the class state after clearing the poll.
  */
-async function clearPoll(classId, userSession, updateClass = true) {
+async function clearPoll(classId, userSession, updateClass = true){
     try {
         const socketUpdates = userSocketUpdates[userSession.email];
         if (classInformation.classrooms[classId].poll.status) {
@@ -182,7 +201,7 @@ async function clearPoll(classId, userSession, updateClass = true) {
             allowTextResponses: false,
             prompt: "",
             weight: 1,
-            isBlind: false,
+            blind: false,
             requiredTags: [],
             studentsAllowedToVote: [],
             allowedResponses: [],
@@ -225,6 +244,13 @@ async function clearPoll(classId, userSession, updateClass = true) {
     }
 }
 
+/**
+ * Handles a student's poll response, updates their answer, manages pog meter, and triggers class updates.
+ * @param {number} classId - The ID of the class.
+ * @param {(string|string[])} res - The button response(s) from the student, or 'remove' to clear.
+ * @param {string} textRes - The text response from the student.
+ * @param {Object} userSession - The user session object.
+ */
 function pollResponse(classId, res, textRes, userSession) {
     const resLength = textRes != null ? textRes.length : 0;
     logger.log('info', `[pollResp] session=(${JSON.stringify(userSession)})`)
@@ -284,7 +310,7 @@ function pollResponse(classId, res, textRes, userSession) {
     classroom.students[email].pollRes.time = new Date()
 
     if (!isRemoving && !pogMeterTracker.pogMeterIncreased[email]) {
-        const resWeight = classroom.poll.responses[res] ? classroom.poll.responses[res].weight : 1;
+        const resWeight = classroom.poll.responses[res].weight || 1;
         // Increase pog meter by 100 times the weight of the response
         // If pog meter reaches 500, increase digipogs by 1 and reset pog meter to 0
         const pogMeterIncrease = Math.floor(100 * resWeight);
@@ -343,11 +369,27 @@ function getPollResponses(classData) {
     return tempPolls
 }
 
+async function deleteCustomPolls(userId) {
+    try {
+        const customPolls = await dbGetAll('SELECT * FROM custom_polls WHERE owner=?', userId)
+        if (customPolls.length == 0) return
+
+        await dbRun('DELETE FROM custom_polls WHERE userId=?', customPolls[0].userId)
+
+        for (let customPoll of customPolls) {
+            await dbRun('DELETE FROM shared_polls WHERE pollId=?', customPoll.pollId)
+        }
+    } catch (err) {
+        throw err
+    }
+}
+
 module.exports = {
     createPoll,
     endPoll,
     clearPoll,
     pollResponse,
     getPollResponses,
+    deleteCustomPolls,
     pogMeterTracker
 }
