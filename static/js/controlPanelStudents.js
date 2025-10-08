@@ -58,6 +58,15 @@ function buildStudent(classroom, studentData) {
         newStudent.querySelector('#email').textContent = studentData.displayName
         studentBox.id = 'checkbox_' + studentData.id
         studentBox.checked = classroom.poll.studentsAllowedToVote.includes(studentData.id.toString())
+        studentBox.onclick = () => {
+            const canStudentVote = studentBox.checked;
+            let studentsAllowedToVote = classroom.poll.studentsAllowedToVote;
+            if (studentBox.checked && !studentsAllowedToVote.includes(studentData.id.toString())) {
+                studentsAllowedToVote.push(studentData.id.toString());
+            }
+
+            socket.emit('changeCanVote', { [studentData.id]: canStudentVote });
+        }
 
         for (let eachResponse in classroom.poll.responses) {
             if (studentData.pollRes.allowTextResponses) {
@@ -179,7 +188,6 @@ function buildStudent(classroom, studentData) {
         for (let permission of [GUEST_PERMISSIONS, STUDENT_PERMISSIONS, MOD_PERMISSIONS, TEACHER_PERMISSIONS]) {
             let strPerms = ['Guest', 'Student', 'Mod', 'Teacher']
             strPerms = strPerms[permission - 1]
-            // }
 
             permSwitch.onchange = (event) => {
                 const newPerm = Number(event.target.value);
@@ -199,6 +207,8 @@ function buildStudent(classroom, studentData) {
         }
 
         // Add each tag as a button to the tag form
+        if (!Array.isArray(classroom.tags)) classroom.tags = [];
+        roomTagDiv.innerHTML = '';
         for (let i = 0; i < classroom.tags.length; i++) {
             let tag = classroom.tags[i]
             if (tag == 'Offline') continue
@@ -207,7 +217,7 @@ function buildStudent(classroom, studentData) {
             button.innerHTML = tag
             button.name = `button${classroom.tags[i]}`;
             button.value = classroom.tags[i];
-            if (studentData.tags == null && studentData.tags == undefined) studentData.tags = ''
+            if (!Array.isArray(studentData.tags)) studentData.tags = []
             button.onclick = function () {
                 if (!button.classList.contains('pressed')) {
                     button.classList.add('pressed')
@@ -217,55 +227,50 @@ function buildStudent(classroom, studentData) {
                     studTagsSpan.appendChild(span);
 
                     // If the studentData does not have tags, add the tag
-                    if (studentData.tags) {
-                        studentData.tags = `${studentData.tags},${tag}`;
+                    if (!studentData.tags.includes(tag)) {
+                        studentData.tags.push(tag);
+                    }
+
+                        // Add to current tags
+                        if (!currentTags.includes(span.textContent)) {
+                            currentTags.push(span.textContent);
+                        }
                     } else {
-                        studentData.tags = tag;
-                    }
+                        button.classList.remove('pressed')
 
-                    // Add to current tags
-                    if (!currentTags.includes(span.textContent)) {
-                        currentTags.push(span.textContent);
-                    }
-                } else {
-                    button.classList.remove('pressed')
-
-                    // Remove from current tags if no other user has the tag
-                    if (currentTags.includes(tag) && !document.querySelector(`button[value="${tag}"].pressed`)) {
-                        currentTags.splice(currentTags.indexOf(tag), 1);
-                    }
+                        // Remove from current tags if no other user has the tag
+                        if (currentTags.includes(tag) && !document.querySelector(`button[value="${tag}"].pressed`)) {
+                            currentTags.splice(currentTags.indexOf(tag), 1);
+                        }
 
                     // Remove the tag from the studentData tags
-                    if (studentData) {
-                        studentData.tags = studentData.tags.split(',').filter(t => t !== tag).join(',');
-                    }
+                    studentData.tags = studentData.tags.filter(t => t !== tag);
 
                     if (studTagsSpan) {
                         const tagSpan = studTagsSpan.querySelector(`#${tag}`);
-                        tagSpan.remove();
+                        if (tagSpan) tagSpan.remove();
                     }
                 }
 
-                // When someone clicks on a tag, save the tags to the server
-                const tags = [];
-                if (roomTagDiv) {
-                    for (let tagButton of roomTagDiv.querySelectorAll('button.pressed')) {
-                        tags.push(tagButton.textContent);
+                    // When someone clicks on a tag, save the tags to the server
+                    const tags = [];
+                    if (roomTagDiv) {
+                        for (let tagButton of roomTagDiv.querySelectorAll('button.pressed')) {
+                            tags.push(tagButton.textContent);
+                        }
+                        socket.emit('saveTags', studentData.id, tags);
                     }
-                    socket.emit('saveTags', studentData.id, tags);
+
+                    createTagSelectButtons();
                 }
 
-                createTagSelectButtons();
-            }
-
-            for (ttag of studentData.tags.split(",")) {
-                if (ttag == tag) {
-                    button.classList.add('pressed')
-                    let span = document.createElement('span');
-                    span.textContent = tag;
-                    span.setAttribute('id', tag);
-                    studTagsSpan.appendChild(span);
-                }
+            // Set pressed state for tags already present
+            if (Array.isArray(studentData.tags) && studentData.tags.includes(tag)) {
+                button.classList.add('pressed')
+                let span = document.createElement('span');
+                span.textContent = tag;
+                span.setAttribute('id', tag);
+                studTagsSpan.appendChild(span);
             }
 
             roomTagDiv.appendChild(button);
@@ -392,15 +397,18 @@ function filterSortChange(classroom) {
 
     // Filter by user attributes
     if (filter.answeredPoll) {
-        for (const userId of userOrder) {
+        for (const userId of userOrder.slice()) {
             let studentElement = document.getElementById(`student-${userId}`);
             if (
                 (filter.answeredPoll == 1 && (
-                        !classroom.students[userId].pollRes.buttonRes && !classroom.students[userId].pollRes.textRes)
+                        classroom.students[userId].pollRes.buttonRes == '' && classroom.students[userId].pollRes.textRes == '')
                 )
             ) {
                 studentElement.style.display = 'none'
-                userOrder.pop(userId)
+                const index = userOrder.indexOf(userId);
+                if (index > -1) {
+                    userOrder.splice(index, 1);
+                }
             }
         }
     }
@@ -410,22 +418,28 @@ function filterSortChange(classroom) {
             let studentElement = document.getElementById(`student-${userId}`);
             if (
                 (
-                    (filter.alert == 1 && (!classroom.students[userId].help || !classroom.students[userId].break))
+                    (filter.alert == 1 && (!classroom.students[userId].help && !classroom.students[userId].break))
                 )
             ) {
                 studentElement.style.display = 'none'
-                userOrder.pop(userId)
+                const index = userOrder.indexOf(userId);
+                if (index > -1) {
+                    userOrder.splice(index, 1);
+                }
             }
         }
     }
 
     if (filter.canVote) {
-        for (const userId of userOrder) {
+        for (const userId of userOrder.slice()) {
             let studentElement = document.getElementById(`student-${userId}`);
             let studentCheckbox = studentElement.querySelector(`#checkbox_${userId}`);
-            if (!studentCheckbox.checked) {
+            if (!studentCheckbox || !studentCheckbox.checked) {
                 studentElement.style.display = 'none'
-                userOrder.pop(userId)
+                const index = userOrder.indexOf(userId);
+                if (index > -1) {
+                    userOrder.splice(index, 1);
+                }
             }
         }
     }
@@ -486,8 +500,8 @@ function filterSortChange(classroom) {
         });
     } else if (sort.helpTime == 2) {
         userOrder.sort((a, b) => {        
-            if(!classroom.students[a].help) return Infinity;
-            if(!classroom.students[b].help) return Infinity;    
+            if(!classroom.students[a].help) return 0;
+            if(!classroom.students[b].help) return 0;    
             return classroom.students[b].help.time - classroom.students[a].help.time;
         });
     }
