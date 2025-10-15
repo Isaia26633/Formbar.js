@@ -20,6 +20,9 @@ function validateStudents(students) {
 // Create a student in the user list
 function buildStudent(classroom, studentData) {
     const studentTemplateDiv = document.getElementById('student-fake')
+    if (studentData.classPermissions === BANNED_PERMISSIONS) {
+        return;
+    }
 
     if (studentData.classPermissions < currentUser.classPermissions) {
         const newStudent = studentTemplateDiv.cloneNode(true)
@@ -58,15 +61,6 @@ function buildStudent(classroom, studentData) {
         newStudent.querySelector('#email').textContent = studentData.displayName
         studentBox.id = 'checkbox_' + studentData.id
         studentBox.checked = classroom.poll.studentsAllowedToVote.includes(studentData.id.toString())
-        studentBox.onclick = () => {
-            const canStudentVote = studentBox.checked;
-            let studentsAllowedToVote = classroom.poll.studentsAllowedToVote;
-            if (studentBox.checked && !studentsAllowedToVote.includes(studentData.id.toString())) {
-                studentsAllowedToVote.push(studentData.id.toString());
-            }
-
-            socket.emit('changeCanVote', { [studentData.id]: canStudentVote });
-        }
 
         for (let eachResponse in classroom.poll.responses) {
             if (studentData.pollRes.allowTextResponses) {
@@ -208,13 +202,14 @@ function buildStudent(classroom, studentData) {
 
         // Add each tag as a button to the tag form
         if (!Array.isArray(classroom.tags)) classroom.tags = [];
-        roomTagDiv.innerHTML = '';
+        //roomTagDiv.innerHTML = '';
         for (let i = 0; i < classroom.tags.length; i++) {
             let tag = classroom.tags[i]
             if (tag == 'Offline') continue
 
             let button = document.createElement('button');
             button.innerHTML = tag
+            button.classList.add('revampButton')
             button.name = `button${classroom.tags[i]}`;
             button.value = classroom.tags[i];
             if (!Array.isArray(studentData.tags)) studentData.tags = []
@@ -307,22 +302,33 @@ function buildStudent(classroom, studentData) {
         }
 
         // Ban and Kick buttons
-        let banStudentButton = document.createElement('button')
-        banStudentButton.className = 'banUser quickButton revampButton warningButton'
-        banStudentButton.setAttribute('data-user', studentData.id)
-        banStudentButton.textContent = 'Ban User'
-        banStudentButton.onclick = (event) => {
-            if (confirm(`Are you sure you want to ban ${studentData.displayName}?`)) {
-                socket.emit('classBanUser', studentData.id)
+        if (studentData.permissions !== GUEST_PERMISSIONS) {
+            const banStudentButton = document.createElement('button')
+            banStudentButton.className = 'banUser quickButton revampButton warningButton'
+            banStudentButton.setAttribute('data-user', studentData.id)
+            banStudentButton.textContent = 'Ban User'
+            banStudentButton.onclick = (event) => {
+                if (confirm(`Are you sure you want to ban ${studentData.displayName}?`)) {
+                    // Send a request to change the student's permissions to BANNED_PERMISSIONS
+                    socket.emit('classPermChange', studentData.id, 0)
+
+                    // Remove their student element from the page
+                    const studentElement = document.getElementById(`student-${studentData.id}`);
+                    if (studentElement) {
+                        studentElement.remove()
+                    }
+                }
             }
+
+            extraButtons.appendChild(banStudentButton)
         }
-        extraButtons.appendChild(banStudentButton)
-        let kickUserButton = document.createElement('button')
+
+        const kickUserButton = document.createElement('button')
         kickUserButton.className = 'kickUser quickButton revampButton warningButton'
         kickUserButton.setAttribute('data-userid', studentData.id)
-        kickUserButton.onclick = (event) => {
+        kickUserButton.onclick = () => {
             if (confirm(`Are you sure you want to kick ${studentData.displayName}?`)) {
-                socket.emit('classKickUser', studentData.id)
+                socket.emit('classKickStudent', studentData.id)
             }
         }
         kickUserButton.textContent = 'Kick User'
@@ -435,6 +441,20 @@ function filterSortChange(classroom) {
             let studentElement = document.getElementById(`student-${userId}`);
             let studentCheckbox = studentElement.querySelector(`#checkbox_${userId}`);
             if (!studentCheckbox || !studentCheckbox.checked) {
+                studentElement.style.display = 'none'
+                const index = userOrder.indexOf(userId);
+                if (index > -1) {
+                    userOrder.splice(index, 1);
+                }
+            }
+        }
+    }
+
+    if (filter.cantVote) {
+        for (const userId of userOrder.slice()) {
+            let studentElement = document.getElementById(`student-${userId}`);
+            let studentCheckbox = studentElement.querySelector(`#checkbox_${userId}`);
+            if (studentCheckbox || studentCheckbox.checked) {
                 studentElement.style.display = 'none'
                 const index = userOrder.indexOf(userId);
                 if (index > -1) {
