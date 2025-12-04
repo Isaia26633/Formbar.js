@@ -6,11 +6,14 @@ const userBreak = [];
 // Stores the currently opened student elements
 let opendetails = [];
 
+// Stores the currently active tab for each student
+let activeStudentTabs = {};
+
 // Checks if all the student boxes are of students currently in the classroom
 function validateStudents(students) {
     for (const student of usersDiv.children) {
-        if(student.tagName.toLowerCase() == 'input') continue;
-        if(student.tagName.toLowerCase() == 'button') continue;
+        if (student.tagName.toLowerCase() == "input") continue;
+        if (student.tagName.toLowerCase() == "button") continue;
         if (!student.id) continue;
 
         if (!students.includes(student.id.replace("student-", "")) && student.id !== "student-fake") {
@@ -26,7 +29,8 @@ function buildStudent(classroomData, studentData) {
         return;
     }
 
-    if (studentData.classPermissions < currentUser.classPermissions) {
+    // Only build the student if they are not the current user
+    if (studentData.id != currentUser.id) {
         const newStudent = studentTemplateDiv.cloneNode(true);
         newStudent.hidden = false;
         newStudent.style.display = "flex";
@@ -34,14 +38,27 @@ function buildStudent(classroomData, studentData) {
         if (studentData.id.toString().includes("guest")) newStudent.classList.add("guestStudent");
         newStudent.open = opendetails.indexOf(studentData.id) != -1;
 
-        newStudent.onclick = (e) => {
-        };
+        newStudent.onclick = (e) => {};
 
         newStudent.addEventListener("toggle", () => {
             if (newStudent.open) {
                 if (opendetails.indexOf(studentData.id) == -1) opendetails.push(studentData.id);
-                let leftMostButton = newStudent.querySelector("button.accordionButton:not(.accButtonDisabled)");
-                doAccordionButton(leftMostButton, true);
+
+                // Check if there's a previously active tab for this student
+                const previousTabOption = activeStudentTabs[studentData.id];
+                let targetButton;
+
+                if (previousTabOption !== undefined) {
+                    // Try to find the button with the stored tab option
+                    targetButton = newStudent.querySelector(`button.accordionButton[data-option="${previousTabOption}"]:not(.accButtonDisabled)`);
+                }
+
+                // If no stored tab or that button is disabled, fall back to the first available button
+                if (!targetButton) {
+                    targetButton = newStudent.querySelector("button.accordionButton:not(.accButtonDisabled)");
+                }
+
+                doAccordionButton(targetButton, true);
             } else {
                 opendetails.splice(opendetails.indexOf(studentData.id), 1);
             }
@@ -62,39 +79,39 @@ function buildStudent(classroomData, studentData) {
 
         newStudent.querySelector("#email").textContent = studentData.displayName;
         studentBox.id = "checkbox_" + studentData.id;
-        studentBox.checked = classroomData.poll.studentsAllowedToVote.includes(studentData.id.toString());
+        studentBox.checked = !classroomData.poll.excludedRespondents.includes(studentData.id);
 
-        // Attach onclick handler for voting rights
-        // Store student ID for closure to avoid capturing the entire studentData object
-        const studentId = studentData.id.toString();
+        // Handle voting rights for student checkboxes
+        const studentId = studentData.id;
         studentBox.onclick = () => {
             const canStudentVote = studentBox.checked;
 
-            // Get current voting list from the global classroom object
-            // Now that the parameter is named classroomData, 'classroom' refers to the global
-            let studentsAllowedToVote = [...(classroomData.poll.studentsAllowedToVote || [])];
-            
-            if (canStudentVote && !studentsAllowedToVote.includes(studentId)) {
-                studentsAllowedToVote.push(studentId);
-            } else if (!canStudentVote) {
-                studentsAllowedToVote = studentsAllowedToVote.filter(id => id !== studentId);
+            // Get current excluded respondents list from the classroom poll
+            let excludedRespondents = [...(classroom.poll.excludedRespondents || [])];
+
+            if (!canStudentVote && !excludedRespondents.includes(studentId)) {
+                // Checkbox is unchecked, so exclude this student
+                excludedRespondents.push(studentId);
+            } else if (canStudentVote) {
+                // Checkbox is checked, so remove from excluded list
+                excludedRespondents = excludedRespondents.filter((id) => id !== studentId);
             }
 
-            // Send the complete updated list to the server
-            socket.emit('updatePoll', { studentsAllowedToVote });
+            // Send the updated excluded list to the server
+            socket.emit("updateExcludedRespondents", excludedRespondents);
         };
 
-        for (let eachResponse in classroomData.poll.responses) {
+        for (let responseObj of classroomData.poll.responses) {
             if (studentData.pollRes.allowTextResponses) {
-                pollBox.style.color = classroomData.poll.responses[eachResponse].color;
+                pollBox.style.color = responseObj.color;
                 pollBox.textContent = studentData.pollRes.textRes;
-            } else if (eachResponse == studentData.pollRes.buttonRes && !classroomData.poll.allowMultipleResponses) {
-                pollBox.style.color = classroomData.poll.responses[eachResponse].color;
-                pollBox.textContent = eachResponse;
-            } else if (classroomData.poll.allowMultipleResponses && studentData.pollRes.buttonRes.indexOf(eachResponse) != -1) {
+            } else if (responseObj.answer == studentData.pollRes.buttonRes && !classroomData.poll.allowMultipleResponses) {
+                pollBox.style.color = responseObj.color;
+                pollBox.textContent = responseObj.answer;
+            } else if (classroomData.poll.allowMultipleResponses && studentData.pollRes.buttonRes.indexOf(responseObj.answer) != -1) {
                 let tempElem = document.createElement("span");
-                tempElem.textContent = eachResponse + " ";
-                tempElem.style.color = classroomData.poll.responses[eachResponse].color;
+                tempElem.textContent = responseObj.answer + " ";
+                tempElem.style.color = responseObj.color;
                 pollBox.appendChild(tempElem);
             }
         }
@@ -110,8 +127,8 @@ function buildStudent(classroomData, studentData) {
             newStudent.style.opacity = 1;
         }
 
-        newStudent.querySelectorAll(".helpAccButton").forEach(e => e.classList.add("accButtonDisabled"));
-        newStudent.querySelectorAll(".breakAccButton").forEach(e => e.classList.add("accButtonDisabled"));
+        newStudent.querySelectorAll(".helpAccButton").forEach((e) => e.classList.add("accButtonDisabled"));
+        newStudent.querySelectorAll(".breakAccButton").forEach((e) => e.classList.add("accButtonDisabled"));
 
         if (studentData.help) {
             let accordionOptions = newStudent.querySelector("div.accordionOptions.helpOptions");
@@ -126,15 +143,13 @@ function buildStudent(classroomData, studentData) {
             };
             deleteTicketButton.textContent = "Delete";
 
-            
             if (studentData.help.reason) {
                 helpReason.textContent = `"${studentData.help.reason}" at ${studentData.help.time.toLocaleTimeString()}`;
                 deleteTicketButton.classList.remove("noReason");
             }
 
             accordionOptions.appendChild(deleteTicketButton);
-            newStudent.querySelectorAll(".helpAccButton").forEach(e => e.classList.remove("accButtonDisabled"));
-
+            newStudent.querySelectorAll(".helpAccButton").forEach((e) => e.classList.remove("accButtonDisabled"));
         }
 
         if (studentData.break == true) {
@@ -168,8 +183,7 @@ function buildStudent(classroomData, studentData) {
             newDiv.appendChild(denyBreakButton);
 
             accordionOptions.appendChild(newDiv);
-            newStudent.querySelectorAll(".breakAccButton").forEach(e => e.classList.remove("accButtonDisabled"));
-
+            newStudent.querySelectorAll(".breakAccButton").forEach((e) => e.classList.remove("accButtonDisabled"));
         }
 
         if (studentData.break == true) {
@@ -184,15 +198,15 @@ function buildStudent(classroomData, studentData) {
             breakReason.appendChild(endBreakButton);
 
             newStudent.classList.add("break");
-            newStudent.querySelectorAll(".breakAccButton").forEach(e => e.classList.remove("accButtonDisabled"));
+            newStudent.querySelectorAll(".breakAccButton").forEach((e) => e.classList.remove("accButtonDisabled"));
         }
 
         if (studentData.pollRes.textRes !== "" && studentData.pollRes.buttonRes !== "") {
-            newStudent.querySelectorAll(".textAccButton").forEach(e => e.classList.remove("accButtonDisabled"));
+            newStudent.querySelectorAll(".textAccButton").forEach((e) => e.classList.remove("accButtonDisabled"));
             newStudent.querySelector("#fullTextResponse").textContent = studentData.pollRes.textRes;
             newStudent.querySelector("#userTextResponse").textContent = studentData.pollRes.textRes;
         } else {
-            newStudent.querySelectorAll(".textAccButton").forEach(e => e.classList.add("accButtonDisabled"));
+            newStudent.querySelectorAll(".textAccButton").forEach((e) => e.classList.add("accButtonDisabled"));
             newStudent.querySelector("#fullTextResponse").textContent = "";
             newStudent.querySelector("#userTextResponse").textContent = "";
         }
@@ -202,26 +216,42 @@ function buildStudent(classroomData, studentData) {
         permSwitch.setAttribute("class", "permSwitch revampButton");
         permSwitch.setAttribute("data-id", studentData.id);
 
-        for (let permission of [GUEST_PERMISSIONS, STUDENT_PERMISSIONS, MOD_PERMISSIONS, TEACHER_PERMISSIONS]) {
-            let strPerms = ["Guest", "Student", "Mod", "Teacher"];
-            strPerms = strPerms[permission - 1];
+        // Check if this student is the owner of the class
+        const isOwner = classroomData.owner === studentData.id;
+
+        // If the student is the owner, add the Owner option and disable the dropdown
+        if (isOwner) {
+            const ownerOption = document.createElement("option");
+            ownerOption.value = 5;
+            ownerOption.innerText = "Owner";
+            ownerOption.selected = true;
+            permSwitch.appendChild(ownerOption);
+            permSwitch.disabled = true;
+            permSwitch.style.opacity = "0.6";
+            permSwitch.style.cursor = "not-allowed";
+        } else {
+            // For non-owners, show the regular permission options
+            for (let permission of [GUEST_PERMISSIONS, STUDENT_PERMISSIONS, MOD_PERMISSIONS, TEACHER_PERMISSIONS]) {
+                let strPerms = ["Guest", "Student", "Mod", "Teacher"];
+                strPerms = strPerms[permission - 1];
+
+                const option = document.createElement("option");
+                option.value = permission;
+                option.innerText = strPerms;
+                permSwitch.appendChild(option);
+
+                if (studentData.classPermissions == permission) {
+                    permSwitch.value = permission;
+                }
+            }
 
             permSwitch.onchange = (event) => {
                 const newPerm = Number(event.target.value);
                 socket.emit("classPermChange", studentData.id, newPerm);
             };
-
-            const option = document.createElement("option");
-            option.value = permission;
-            option.innerText = strPerms;
-            permSwitch.appendChild(option);
-
-            if (studentData.classPermissions == permission) {
-                permSwitch.value = permission;
-            }
-
-            permDiv.appendChild(permSwitch);
         }
+
+        permDiv.appendChild(permSwitch);
 
         // Add each tag as a button to the tag form
         if (!Array.isArray(classroomData.tags)) classroomData.tags = [];
@@ -241,7 +271,7 @@ function buildStudent(classroomData, studentData) {
                     button.classList.add("pressed");
                     let span = document.createElement("span");
                     span.textContent = tag;
-                    span.className = 'revampTag'
+                    span.className = "revampTag";
                     span.setAttribute("id", tag);
                     studTagsSpan.appendChild(span);
 
@@ -289,7 +319,7 @@ function buildStudent(classroomData, studentData) {
                 let span = document.createElement("span");
                 span.textContent = tag;
                 span.setAttribute("id", tag);
-                span.className = 'revampTag'
+                span.className = "revampTag";
                 studTagsSpan.appendChild(span);
             }
 
@@ -303,14 +333,9 @@ function buildStudent(classroomData, studentData) {
             digipogAwardInput.className = "quickButton revampButton revampWithText digipogAward";
             digipogAwardInput.placeholder = "0";
             digipogAwardInput.type = "number";
-            digipogAwardInput.min = 0;
-            digipogAwardInput.value = "";
-            digipogAwardInput.max = 999;
             digipogAwardInput.oninput = (event) => {
-                if (digipogAwardInput.value > 999) digipogAwardInput.value = 999;
-                if (digipogAwardInput.value < 0) digipogAwardInput.value = 0;
-                if (digipogAwardInput.value == "") digipogAwardInput.value = 0;
-                digipogAwardInput.value = parseInt(digipogAwardInput.value);
+                // Allow only numbers and negative sign
+                if (event.data !== "-") digipogAwardInput.value = digipogAwardInput.value.replace(/[^0-9]/g, "");
             };
             digipogButtons.appendChild(digipogAwardInput);
 
@@ -374,8 +399,9 @@ if (settings.filter) {
             let filterElement = document.querySelector(".filter#" + filterType);
             if (filterElement) {
                 filterElement.classList.add("pressed");
-                filterElement.innerHTML = FilterState[filterElement.id] + `<img src="/img/checkmark-outline.svg" alt=${FilterState[filterElement.id]}>`;
-                if(filterType == 'canVote') filterElement.innerHTML = FilterState[filterElement.id][filter[filterType]];
+                filterElement.innerHTML =
+                    FilterState[filterElement.id] + `<img src="/img/icons/checkmark-outline.svg" alt=${FilterState[filterElement.id]}>`;
+                if (filterType == "canVote") filterElement.innerHTML = FilterState[filterElement.id][filter[filterType]];
             }
         }
     }
@@ -397,15 +423,15 @@ if (settings.sort) {
 
                 switch (sort[sortType]) {
                     case 0:
-                        sortIcon.src = "/img/swap-vertical-up.svg";
+                        sortIcon.src = "/img/icons/swap-vertical-up.svg";
                         sortIcon.style.opacity = 0;
                         break;
                     case 1:
-                        sortIcon.src = "/img/swap-vertical-down.svg";
+                        sortIcon.src = "/img/icons/swap-vertical-down.svg";
                         sortIcon.style.opacity = 1;
                         break;
                     case 2:
-                        sortIcon.src = "/img/swap-vertical-up.svg";
+                        sortIcon.src = "/img/icons/swap-vertical-up.svg";
                         sortIcon.style.opacity = 1;
                         break;
                 }
@@ -481,7 +507,7 @@ function filterSortChange(classroom) {
 
     // sort by response order
     if (sort.responseOrder == 1) {
-        let responsesIndexes = Object.keys(classroom.poll.responses);
+        let responsesIndexes = classroom.poll.responses.map((r) => r.answer);
         userOrder.sort((a, b) => {
             let aIndex = responsesIndexes.indexOf(classroom.students[a].pollRes.buttonRes);
             let bIndex = responsesIndexes.indexOf(classroom.students[b].pollRes.buttonRes);
@@ -492,7 +518,7 @@ function filterSortChange(classroom) {
             return aIndex - bIndex;
         });
     } else if (sort.responseOrder == 2) {
-        let responsesIndexes = Object.keys(classroom.poll.responses);
+        let responsesIndexes = classroom.poll.responses.map((r) => r.answer);
         userOrder.sort((a, b) => {
             let aIndex = responsesIndexes.indexOf(classroom.students[a].pollRes.buttonRes);
             let bIndex = responsesIndexes.indexOf(classroom.students[b].pollRes.buttonRes);
@@ -561,8 +587,8 @@ for (let filterElement of document.getElementsByClassName("filter")) {
     filterElement.onclick = (event) => {
         let filterElement = event.target;
 
-        if(filterElement.id == 'canVote') {
-            if(filter[filterElement.id] >= 2) {
+        if (filterElement.id == "canVote") {
+            if (filter[filterElement.id] >= 2) {
                 filter[filterElement.id] = 0;
             } else {
                 filter[filterElement.id] += 1;
@@ -582,11 +608,10 @@ for (let filterElement of document.getElementsByClassName("filter")) {
                 filterElement.textContent = FilterState[filterElement.id];
             } else {
                 filterElement.classList.add("pressed");
-                filterElement.innerHTML = FilterState[filterElement.id] + `<img src="/img/checkmark-outline.svg" alt=${FilterState[filterElement.id]}>`;
+                filterElement.innerHTML =
+                    FilterState[filterElement.id] + `<img src="/img/icons/checkmark-outline.svg" alt=${FilterState[filterElement.id]}>`;
             }
         }
-
-        
 
         // Update the filter settings in the database
         socket.emit("setClassSetting", "filter", filter);
@@ -608,7 +633,7 @@ for (let sortElement of document.getElementsByClassName("sort")) {
                 if (otherSortElement) {
                     otherSortElement.classList.remove("pressed");
                     let otherSortIcon = otherSortElement.querySelector("div").getElementsByClassName("currentSortIcon")[0];
-                    otherSortIcon.src = "/img/swap-vertical-up.svg";
+                    otherSortIcon.src = "/img/icons/swap-vertical-up.svg";
                     otherSortIcon.style.opacity = 0;
                 }
             }
@@ -618,15 +643,15 @@ for (let sortElement of document.getElementsByClassName("sort")) {
 
         switch (sort[sortElement.id]) {
             case 0:
-                sortIcon.src = "/img/swap-vertical-up.svg";
+                sortIcon.src = "/img/icons/swap-vertical-up.svg";
                 sortIcon.style.opacity = 1;
                 break;
             case 1:
-                sortIcon.src = "/img/swap-vertical-down.svg";
+                sortIcon.src = "/img/icons/swap-vertical-down.svg";
                 sortIcon.style.opacity = 1;
                 break;
             case 2:
-                sortIcon.src = "/img/swap-vertical-up.svg";
+                sortIcon.src = "/img/icons/swap-vertical-up.svg";
                 sortIcon.style.opacity = 0;
                 break;
         }
@@ -658,7 +683,7 @@ function approveBreak(breakApproval, userId) {
 }
 
 function awardDigipogs(userId, amount) {
-    if (amount <= 0 || isNaN(amount)) return;
+    if (isNaN(amount)) return;
 
     socket.emit("awardDigipogs", { from: currentUser.id, to: userId, amount: Number(amount) });
     const awardButton = document.querySelector(`button.digipogSend[data-user="${userId}"]`);
@@ -668,7 +693,7 @@ function awardDigipogs(userId, amount) {
 
 function doAccordionButton(button, forceOpen = false) {
     if (!button) return;
-    if(button.classList.contains("accButtonDisabled")) return;
+    if (button.classList.contains("accButtonDisabled")) return;
 
     const studentElement = button.closest("details");
     const accordion = studentElement.querySelector("div.accordionPopup");
@@ -688,6 +713,10 @@ function doAccordionButton(button, forceOpen = false) {
     });
     otherButtons.forEach((e) => e.classList.remove("active"));
     button.classList.add("active");
+
+    // Store the active tab option for this student
+    const studentId = studentElement.id.split("student-")[1];
+    activeStudentTabs[studentId] = button.dataset.option;
 
     const studentOptions = {
         0: {

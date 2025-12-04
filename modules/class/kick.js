@@ -2,7 +2,7 @@ const { classInformation } = require("./classroom");
 const { logger } = require("../logger");
 const { getEmailFromId } = require("../student");
 const { setClassOfApiSockets, userSockets, userUpdateSocket } = require("../socketUpdates");
-const { dbRun } = require("../database");
+const { dbRun, dbGet } = require("../database");
 const { TEACHER_PERMISSIONS, BANNED_PERMISSIONS } = require("../permissions");
 
 // Kicks a student from a class
@@ -11,13 +11,20 @@ const { TEACHER_PERMISSIONS, BANNED_PERMISSIONS } = require("../permissions");
 async function classKickStudent(userId, classId, options = { exitRoom: true, ban: false }) {
     try {
         const email = await getEmailFromId(userId);
-        logger.log('info', `[classKickUser] email=(${email}) classId=(${classId}) exitRoom=${options.exitRoom}`);
+        logger.log("info", `[classKickUser] email=(${email}) classId=(${classId}) exitRoom=${options.exitRoom}`);
 
         // Check if user exists in classInformation.users before trying to modify
         if (classInformation.users[email]) {
             // Remove user from class session
-            classInformation.users[email].classPermissions = options.ban ? BANNED_PERMISSIONS : null;
-            classInformation.users[email].activeClass = null;
+            const user = classInformation.users[email];
+            user.activeClass = null;
+            user.break = false;
+            user.help = false;
+
+            // If the user is being banned, set their classPermissions to BANNED_PERMISSIONS
+            if (options.ban) {
+                user.classPermissions = BANNED_PERMISSIONS;
+            }
             setClassOfApiSockets(classInformation.users[email].API, null);
         }
 
@@ -25,7 +32,9 @@ async function classKickStudent(userId, classId, options = { exitRoom: true, ban
         if (classInformation.classrooms[classId] && classInformation.classrooms[classId].students[email]) {
             const student = classInformation.classrooms[classId].students[email];
             student.activeClass = null;
-            student.tags = ['Offline'];
+            student.break = false;
+            student.help = false;
+            student.tags = ["Offline"];
             if (classInformation.users[email]) {
                 classInformation.users[email] = student;
             }
@@ -40,32 +49,37 @@ async function classKickStudent(userId, classId, options = { exitRoom: true, ban
         // If the user is a guest, then do not try to remove them from the database
         if (options.exitRoom && classInformation.classrooms[classId]) {
             if (classInformation.users[email] && !classInformation.users[email].isGuest && !options.ban) {
-                await dbRun('DELETE FROM classusers WHERE studentId=? AND classId=?', [classInformation.users[email].id, classId]);
+                await dbRun("DELETE FROM classusers WHERE studentId=? AND classId=?", [classInformation.users[email].id, classId]);
                 delete classInformation.classrooms[classId].students[email];
             }
         }
 
         // Update the control panel on all tabs
-        const userSocket = userSockets[email];
-        userUpdateSocket(email, 'classUpdate', classId);
+        // @TODO: TEMPORARY FIX - please move update functions outside of a class, or refactor them into the classroom class.
+        const classOwner = await dbGet("SELECT owner FROM classroom WHERE id=?", [classId]);
+        if (classOwner) {
+            const ownerEmail = await getEmailFromId(classOwner.owner);
+            userUpdateSocket(ownerEmail, "classUpdate", classId);
+        }
 
         // If the user is logged in, then handle the user's session
-        if (userSocket) {
+        const usersSockets = userSockets[email];
+        if (usersSockets) {
             for (const userSocket of Object.values(userSockets[email])) {
                 userSocket.leave(`class-${classId}`);
                 userSocket.request.session.classId = null;
                 userSocket.request.session.save();
-                userSocket.emit('reload');
+                userSocket.emit("reload");
             }
         }
     } catch (err) {
-        logger.log('error', err.stack);
+        logger.log("error", err.stack);
     }
 }
 
 function classKickStudents(classId) {
     try {
-        logger.log('info', `[classKickStudents] classId=(${classId})`)
+        logger.log("info", `[classKickStudents] classId=(${classId})`);
 
         for (const student of Object.values(classInformation.classrooms[classId].students)) {
             if (student.classPermissions < TEACHER_PERMISSIONS) {
@@ -73,11 +87,11 @@ function classKickStudents(classId) {
             }
         }
     } catch (err) {
-        logger.log('error', err.stack);
+        logger.log("error", err.stack);
     }
 }
 
 module.exports = {
     classKickStudent,
-    classKickStudents
-}
+    classKickStudents,
+};
