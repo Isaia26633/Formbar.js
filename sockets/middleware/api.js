@@ -5,7 +5,7 @@ const { userSockets } = require("../../modules/socketUpdates");
 const { Student } = require("../../modules/student");
 const { getUserClass } = require("../../modules/user/user");
 const { classKickStudent } = require("../../modules/class/kick");
-const { compare, hash } = require("../../modules/crypto");
+const { compare } = require("../../modules/crypto");
 
 module.exports = {
     order: 10,
@@ -14,7 +14,7 @@ module.exports = {
             const { api } = socket.request.headers;
             if (api) {
                 await new Promise((resolve, reject) => {
-                    // Get all users and compare the API key hash
+                    // Look up the user by comparing API key hash
                     database.all("SELECT * FROM users", [], async (err, users) => {
                         try {
                             if (err) throw err;

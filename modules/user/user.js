@@ -157,6 +157,8 @@ function getUserClass(email) {
     }
 }
 
+const API_KEY_CACHE = new Map(); // Stores API key to email mappings
+
 /**
  * Asynchronous function to get the email associated with a given API key.
  * @param {string} api - The API key.
@@ -166,6 +168,11 @@ async function getEmailFromAPIKey(api) {
     try {
         // If no API key is provided, return an error
         if (!api) return { error: "Missing API key" };
+
+        // Check if the API key is already cached
+        if (API_KEY_CACHE.has(api)) {
+            return API_KEY_CACHE.get(api);
+        }
 
         // Query the database for the email associated with the API key
         let user = await new Promise((resolve, reject) => {
@@ -198,7 +205,8 @@ async function getEmailFromAPIKey(api) {
         // If an error occurred, return the error
         if (user.error) return user;
 
-        // If no error occurred, return the email
+        // If no error occurred, cache the email and return it
+        API_KEY_CACHE.set(api, user.email);
         return user.email;
     } catch (err) {
         // If an error occurs, return the error

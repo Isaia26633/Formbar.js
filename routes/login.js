@@ -167,7 +167,12 @@ module.exports = {
 
                                     for (const temp of tempUsers) {
                                         const decoded = jwt.decode(temp.token);
-                                        if (decoded && decoded.email === user.email && decoded.hashedPassword) {
+                                        if (
+                                            decoded &&
+                                            decoded.email === user.email &&
+                                            typeof decoded.hashedPassword === "string" &&
+                                            decoded.hashedPassword.length > 0
+                                        ) {
                                             // Verify password matches
                                             const passwordMatches = await compare(user.password, decoded.hashedPassword);
                                             if (passwordMatches) {
@@ -329,9 +334,6 @@ module.exports = {
                     // Get all existing users and check for existing emails
                     const users = await dbGetAll("SELECT email, displayName FROM users");
 
-                    let newAPI;
-                    let newSecret;
-
                     // If there are no users in the database, the first user is a manager
                     if (users.length === 0) {
                         userPermission = MANAGER_PERMISSIONS;
@@ -363,18 +365,9 @@ module.exports = {
                         }
                     }
 
-                    const existingAPIs = (await dbGetAll("SELECT API FROM users")).map((row) => row.API);
-                    const existingSecrets = (await dbGetAll("SELECT secret FROM users")).map((row) => row.secret);
-
-                    // Generate unique API key
-                    do {
-                        newAPI = crypto.randomBytes(32).toString("hex");
-                    } while (existingAPIs.includes(newAPI));
-
-                    // Generate unique secret key
-                    do {
-                        newSecret = crypto.randomBytes(256).toString("hex");
-                    } while (existingSecrets.includes(newSecret));
+                    // Generate API key and secret
+                    const newAPI = crypto.randomBytes(32).toString("hex");
+                    const newSecret = crypto.randomBytes(256).toString("hex");
 
                     // Hash the provided password
                     const hashedPassword = await hash(user.password);

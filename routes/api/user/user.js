@@ -17,7 +17,7 @@ module.exports = {
                     user = await dbGet("SELECT * FROM users WHERE id=?", userId);
                 } else {
                     // Load missing digipogs and verified values from the database
-                    const { digipogs, verified } = (await dbGet("SELECT digipogs, verified FROM users WHERE id=?", userId)) || {};
+                    const { digipogs = 0, verified = false } = (await dbGet("SELECT digipogs, verified FROM users WHERE id=?", userId)) || {};
                     user.digipogs = digipogs;
                     user.verified = verified;
                 }
@@ -27,7 +27,8 @@ module.exports = {
                 let userEmail = undefined;
                 // Safer check for manager permissions
                 const isManager = requesterEmail && classInformation.users[requesterEmail]?.permissions === MANAGER_PERMISSIONS;
-                if (user && (requesterEmail === user.email || isManager)) {
+                const isSelf = requesterEmail && requesterEmail === user.email;
+                if (user && (isSelf || isManager)) {
                     userEmail = user.email;
                 }
 
